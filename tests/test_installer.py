@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -41,22 +42,31 @@ OPENAI_YAML = (
     "  display_name: Use Z.AI GLM-5.3 Worker\n"
     "  short_description: Bounded implementation worker.\n"
 )
-PKG_INIT = '"""codex-glm-subagent package."""\nfrom .credentials import main\n'
+PKG_INIT = '"""codex-glm-subagent package."""\n'
 CREDENTIALS_PY = (
     '"""credentials module for tests."""\n'
+    'import os\n'
+    'import sys\n'
     'KEYCHAIN_SERVICE = "com.shiauweizhao.codex-glm-subagent"\n'
     'API_KEY_ACCOUNT = "zai-api-key"\n'
-    'def main(argv=None):\n    return 0\n'
+    'def main(argv=None):\n'
+    '    argv = sys.argv[1:] if argv is None else argv\n'
+    '    if argv == ["echo-pythonpath"]:\n'
+    '        print(os.environ.get("PYTHONPATH", ""))\n'
+    '    return 0\n'
+    'if __name__ == "__main__":\n'
+    '    raise SystemExit(main())\n'
 )
 WRAPPER = (
     "#!/bin/sh\n"
-    'export PYTHONPATH="__CODEX_GLM53_RUNTIME_ROOT__${PYTHONPATH:+:$PYTHONPATH}"\n'
-    'exec "__PYTHON_EXECUTABLE__" -m codex_glm53_subagent.credentials "$@"\n'
+    "CODEX_GLM53_RUNTIME_ROOT=__CODEX_GLM53_RUNTIME_ROOT__\n"
+    'export PYTHONPATH="${CODEX_GLM53_RUNTIME_ROOT}${PYTHONPATH:+:$PYTHONPATH}"\n'
+    'exec __PYTHON_EXECUTABLE__ -m codex_glm53_subagent.credentials "$@"\n'
 )
 SNIPPET = (
-    "<!-- codex-glm53-subagent:start -->\n"
+    "<!-- codex-glm-subagent:start -->\n"
     "Managed GLM-5.3 standalone worker block.\n"
-    "<!-- codex-glm53-subagent:end -->\n"
+    "<!-- codex-glm-subagent:end -->\n"
 )
 
 
@@ -149,6 +159,38 @@ class RenderTest(InstallerTestBase):
         self.assertNotIn("__PYTHON_EXECUTABLE__", text)
         self.assertNotIn("__CODEX_GLM53_RUNTIME_ROOT__", text)
 
+    def test_wrapper_quotes_shell_paths_and_preserves_pythonpath(self):
+        self.codex = self.tmp / 'codex "double" \'single\' $dollar (paren) $(touch${IFS}PWNED)'
+        self.install("darwin")
+        helper = (
+            self.codex
+            / "zai-glm53-subagent"
+            / "bin"
+            / "codex-zai-glm53-credentials"
+        )
+        syntax = subprocess.run(
+            ["/bin/sh", "-n", str(helper)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+        env = dict(os.environ)
+        env["PYTHONPATH"] = "existing path"
+        result = subprocess.run(
+            [str(helper), "echo-pythonpath"],
+            cwd=self.tmp,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        runtime = self.codex / "zai-glm53-subagent" / "runtime"
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(runtime) + os.pathsep + "existing path")
+        self.assertFalse((self.tmp / "PWNED").exists())
+
 
 class InstallBehaviorTest(InstallerTestBase):
     def test_idempotent(self):
@@ -207,9 +249,9 @@ class AgentsBlockTest(InstallerTestBase):
         (self.codex / "AGENTS.md").write_text(
             "# Header\n"
             "keep me\n"
-            "<!-- codex-glm53-subagent:start -->\n"
+            "<!-- codex-glm-subagent:start -->\n"
             "OLD BLOCK\n"
-            "<!-- codex-glm53-subagent:end -->\n"
+            "<!-- codex-glm-subagent:end -->\n"
             "footer text\n",
             encoding="utf-8",
         )
@@ -223,11 +265,46 @@ class AgentsBlockTest(InstallerTestBase):
 
         installer.uninstall(self.codex, platform="darwin")
         after = (self.codex / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertNotIn("<!-- codex-glm53-subagent:start -->", after)
-        self.assertNotIn("<!-- codex-glm53-subagent:end -->", after)
+        self.assertNotIn("<!-- codex-glm-subagent:start -->", after)
+        self.assertNotIn("<!-- codex-glm-subagent:end -->", after)
         self.assertIn("# Header", after)
         self.assertIn("keep me", after)
         self.assertIn("footer text", after)
+
+    def test_real_repo_is_idempotent_and_uninstall_removes_canonical_block(self):
+        codex_home = self.tmp / "real-codex"
+        codex_home.mkdir()
+        agents = codex_home / "AGENTS.md"
+        agents.write_text("# User rules\nkeep me\n", encoding="utf-8")
+
+        first = installer.install(REPO, codex_home, platform="darwin")
+        second = installer.install(REPO, codex_home, platform="darwin")
+        installed = agents.read_text(encoding="utf-8")
+        self.assertEqual(first["status"], "installed")
+        self.assertEqual(second["status"], "already_installed")
+        self.assertEqual(installed.count("<!-- codex-glm-subagent:start -->"), 1)
+        self.assertEqual(installed.count("<!-- codex-glm-subagent:end -->"), 1)
+        helper = (
+            codex_home
+            / "zai-glm53-subagent"
+            / "bin"
+            / "codex-zai-glm53-credentials"
+        )
+        help_result = subprocess.run(
+            [str(helper), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        self.assertNotIn("RuntimeWarning", help_result.stderr)
+
+        installer.uninstall(codex_home, platform="darwin")
+        after = agents.read_text(encoding="utf-8")
+        self.assertNotIn("<!-- codex-glm-subagent:start -->", after)
+        self.assertNotIn("<!-- codex-glm-subagent:end -->", after)
+        self.assertIn("# User rules", after)
+        self.assertIn("keep me", after)
 
 
 class UninstallTest(InstallerTestBase):
@@ -253,12 +330,105 @@ class UninstallTest(InstallerTestBase):
         self.assertTrue((self.codex / "agents").exists())
 
 
+class PathSafetyTest(InstallerTestBase):
+    def _write_manifest_files(self, managed_files):
+        manifest = self.codex / "zai-glm53-subagent" / "install-manifest.json"
+        payload = {
+            "schema_version": 1,
+            "agent": "zai_glm53_worker",
+            "managed_files": managed_files,
+        }
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        return manifest
+
+    def test_uninstall_rejects_traversal_before_deleting_any_file(self):
+        self.install("darwin")
+        managed = self.codex / "agents" / "zai-glm53-worker.toml"
+        victim = self.tmp / "victim"
+        victim.write_text("KEEP", encoding="utf-8")
+        manifest = self._write_manifest_files(
+            {
+                "agents/zai-glm53-worker.toml": installer._sha256(managed.read_bytes()),
+                "../victim": installer._sha256(victim.read_bytes()),
+            }
+        )
+
+        purge_calls = []
+        with self.assertRaisesRegex(RuntimeError, "invalid managed path"):
+            installer.uninstall(
+                self.codex,
+                platform="darwin",
+                purge_secrets=True,
+                purge_fn=lambda codex_home: purge_calls.append(codex_home),
+            )
+        self.assertTrue(managed.exists())
+        self.assertEqual(victim.read_text(encoding="utf-8"), "KEEP")
+        self.assertTrue(manifest.exists())
+        self.assertEqual(purge_calls, [])
+
+    def test_uninstall_rejects_absolute_path_and_invalid_hash(self):
+        self.install("darwin")
+        managed = self.codex / "agents" / "zai-glm53-worker.toml"
+        victim = self.tmp / "absolute-victim"
+        victim.write_text("KEEP", encoding="utf-8")
+        manifest = self._write_manifest_files(
+            {str(victim): installer._sha256(victim.read_bytes())}
+        )
+        with self.assertRaisesRegex(RuntimeError, "invalid managed path"):
+            installer.uninstall(self.codex, platform="darwin")
+        self.assertTrue(managed.exists())
+        self.assertTrue(victim.exists())
+        self.assertTrue(manifest.exists())
+
+        self._write_manifest_files({"agents/zai-glm53-worker.toml": 123})
+        with self.assertRaisesRegex(RuntimeError, "invalid managed hash"):
+            installer.uninstall(self.codex, platform="darwin")
+        self.assertTrue(managed.exists())
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlinks are unavailable")
+    def test_install_rejects_intermediate_symlink_escape_before_write(self):
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        self.codex.mkdir()
+        os.symlink(outside, self.codex / "agents", target_is_directory=True)
+
+        with self.assertRaisesRegex(RuntimeError, "escapes Codex home"):
+            self.install("darwin")
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse((self.codex / "zai-glm53-subagent").exists())
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlinks are unavailable")
+    def test_uninstall_rejects_agents_symlink_before_deleting_managed_files(self):
+        self.install("darwin")
+        managed = self.codex / "agents" / "zai-glm53-worker.toml"
+        manifest = self.codex / "zai-glm53-subagent" / "install-manifest.json"
+        outside = self.tmp / "outside-agents"
+        outside.write_text("KEEP", encoding="utf-8")
+        agents = self.codex / "AGENTS.md"
+        agents.unlink()
+        os.symlink(outside, agents)
+
+        with self.assertRaisesRegex(RuntimeError, "escapes Codex home"):
+            installer.uninstall(self.codex, platform="darwin")
+        self.assertTrue(managed.exists())
+        self.assertTrue(manifest.exists())
+        self.assertEqual(outside.read_text(encoding="utf-8"), "KEEP")
+
+
 class PurgeBoundaryTest(InstallerTestBase):
     def test_purge_opt_in_boundary(self):
         self.install("darwin")
         calls = []
 
         def fake_purge(codex_home):
+            runtime_module = (
+                codex_home
+                / "zai-glm53-subagent"
+                / "runtime"
+                / "codex_glm53_subagent"
+                / "credentials.py"
+            )
+            self.assertTrue(runtime_module.exists())
             calls.append(codex_home)
 
         installer.uninstall(self.codex, platform="darwin", purge_secrets=False, purge_fn=fake_purge)

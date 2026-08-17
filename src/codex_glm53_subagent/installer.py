@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -23,8 +24,8 @@ from typing import Any, Callable, Optional
 JSON = dict[str, Any]
 
 AGENT_NAME = "zai_glm53_worker"
-AGENTS_START = "<!-- codex-glm53-subagent:start -->"
-AGENTS_END = "<!-- codex-glm53-subagent:end -->"
+AGENTS_START = "<!-- codex-glm-subagent:start -->"
+AGENTS_END = "<!-- codex-glm-subagent:end -->"
 MANIFEST_RELATIVE = Path("zai-glm53-subagent") / "install-manifest.json"
 
 AUTH_BODY_PLACEHOLDER = "__CODEX_GLM53_AUTH_BODY__"
@@ -61,6 +62,34 @@ def _atomic_write(path: Path, data: bytes, mode: int = 0o600) -> bool:
 
 def _escaped(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _managed_target(codex_home: Path, relative: str | Path) -> Path:
+    if isinstance(relative, Path):
+        raw = relative.as_posix()
+    elif isinstance(relative, str):
+        raw = relative
+    else:
+        raise RuntimeError("invalid managed path")
+    parts = raw.split("/")
+    relative_path = Path(raw)
+    if (
+        not raw
+        or relative_path.is_absolute()
+        or any(part in ("", ".", "..") for part in parts)
+    ):
+        raise RuntimeError("invalid managed path")
+
+    home_resolved = codex_home.resolve(strict=False)
+    target = codex_home / relative_path
+    target_resolved = target.resolve(strict=False)
+    try:
+        target_resolved.relative_to(home_resolved)
+    except ValueError as error:
+        raise RuntimeError("managed path escapes Codex home") from error
+    if target_resolved == home_resolved:
+        raise RuntimeError("invalid managed path")
+    return target
 
 
 def _managed_sources(repo_root: Path) -> list[tuple[Path, Path, int]]:
@@ -138,10 +167,12 @@ def _source_data(
             MODEL_CATALOG_PLACEHOLDER.encode(), _escaped(str(catalog_path)).encode()
         )
     if relative == Path("zai-glm53-subagent") / "bin" / "codex-zai-glm53-credentials":
-        escaped_python = _escaped(str(Path(sys.executable)))
-        data = data.replace(PYTHON_PLACEHOLDER.encode(), escaped_python.encode())
+        shell_python = shlex.quote(str(Path(sys.executable)))
+        data = data.replace(PYTHON_PLACEHOLDER.encode(), shell_python.encode())
         runtime_root = codex_home / "zai-glm53-subagent" / "runtime"
-        data = data.replace(RUNTIME_ROOT_PLACEHOLDER.encode(), str(runtime_root).encode())
+        data = data.replace(
+            RUNTIME_ROOT_PLACEHOLDER.encode(), shlex.quote(str(runtime_root)).encode()
+        )
     return data
 
 
@@ -206,17 +237,20 @@ def install(
     codex_home = Path(os.path.abspath(codex_home))
     platform = platform or sys.platform
     sources = _managed_sources(repo_root)
-    manifest_path = codex_home / MANIFEST_RELATIVE
+    manifest_path = _managed_target(codex_home, MANIFEST_RELATIVE)
+    agents_path = _managed_target(codex_home, "AGENTS.md")
     old = _load_manifest(manifest_path)
     old_files = old.get("managed_files") or {}
     if not isinstance(old_files, dict):
-        old_files = {}
+        raise RuntimeError("install manifest has invalid managed files")
 
+    planned: list[tuple[Path, Path, bytes, int]] = []
     for source, relative, _mode in sources:
         if not source.is_file():
             raise RuntimeError(f"missing install source: {source}")
-        destination = codex_home / relative
+        destination = _managed_target(codex_home, relative)
         data = _source_data(source, relative, codex_home, platform)
+        planned.append((relative, destination, data, _mode))
         if not destination.exists() or destination.read_bytes() == data:
             continue
         expected = old_files.get(str(relative))
@@ -225,7 +259,6 @@ def install(
                 f"refusing to overwrite unmanaged or modified file: {destination}"
             )
 
-    agents_path = codex_home / "AGENTS.md"
     existing_agents = (
         agents_path.read_text(encoding="utf-8") if agents_path.exists() else ""
     )
@@ -234,9 +267,7 @@ def install(
 
     changed = False
     manifest_files: dict[str, str] = {}
-    for source, relative, mode in sources:
-        data = _source_data(source, relative, codex_home, platform)
-        destination = codex_home / relative
+    for relative, destination, data, mode in planned:
         changed = _atomic_write(destination, data, mode) or changed
         manifest_files[str(relative)] = _sha256(data)
 
@@ -266,32 +297,58 @@ def uninstall(
 ) -> JSON:
     codex_home = Path(os.path.abspath(codex_home))
     platform = platform or sys.platform
-    manifest_path = codex_home / MANIFEST_RELATIVE
+    manifest_path = _managed_target(codex_home, MANIFEST_RELATIVE)
     manifest = _load_manifest(manifest_path)
+    managed_files = manifest.get("managed_files") or {}
+    if not isinstance(managed_files, dict):
+        raise RuntimeError("install manifest has invalid managed files")
+
+    validated: list[tuple[str, str, Path]] = []
+    for relative, expected_hash in managed_files.items():
+        target = _managed_target(codex_home, relative)
+        if (
+            not isinstance(expected_hash, str)
+            or len(expected_hash) != 64
+            or any(character not in "0123456789abcdef" for character in expected_hash)
+        ):
+            raise RuntimeError("invalid managed hash")
+        validated.append((relative, expected_hash, target))
+
     preserved: list[str] = []
-    removed: list[str] = []
-    for relative, expected_hash in (manifest.get("managed_files") or {}).items():
-        target = codex_home / relative
+    removable: list[tuple[str, Path]] = []
+    for relative, expected_hash, target in validated:
         if not target.exists():
             continue
-        if _sha256(target.read_bytes()) != expected_hash:
+        try:
+            actual_hash = _sha256(target.read_bytes())
+        except OSError as error:
+            raise RuntimeError("could not inspect managed file") from error
+        if actual_hash != expected_hash:
             preserved.append(relative)
             continue
+        removable.append((relative, target))
+
+    agents_path = _managed_target(codex_home, "AGENTS.md")
+    cleaned_agents: Optional[bytes] = None
+    if agents_path.exists():
+        cleaned = _replace_agents_block(agents_path.read_text(encoding="utf-8"), None)
+        cleaned_agents = cleaned.encode("utf-8")
+
+    if purge_secrets and platform == "darwin" and purge_fn is not None:
+        purge_fn(codex_home)
+
+    removed: list[str] = []
+    for relative, target in removable:
         target.unlink()
         removed.append(relative)
 
-    agents_path = codex_home / "AGENTS.md"
-    if agents_path.exists():
-        cleaned = _replace_agents_block(agents_path.read_text(encoding="utf-8"), None)
-        _atomic_write(agents_path, cleaned.encode("utf-8"), 0o600)
+    if cleaned_agents is not None:
+        _atomic_write(agents_path, cleaned_agents, 0o600)
 
     if manifest_path.exists():
         manifest_path.unlink()
 
     _prune_empty_owned_dirs(codex_home)
-
-    if purge_secrets and platform == "darwin" and purge_fn is not None:
-        purge_fn(codex_home)
 
     return {
         "status": "uninstalled",
@@ -305,11 +362,13 @@ def _credential_purge(codex_home: Path) -> None:
     env = dict(os.environ)
     existing = env.get("PYTHONPATH")
     env["PYTHONPATH"] = str(runtime) + (os.pathsep + existing if existing else "")
-    subprocess.run(
+    completed = subprocess.run(
         [sys.executable, "-m", "codex_glm53_subagent.credentials", "purge"],
         env=env,
         check=False,
     )
+    if completed.returncode != 0:
+        raise RuntimeError("credential purge failed")
 
 
 def main(argv: Optional[list[str]] = None) -> int:

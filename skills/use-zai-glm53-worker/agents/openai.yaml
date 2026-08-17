@@ -1,0 +1,11 @@
+interface:
+  display_name: "Use Z.AI GLM-5.3 Worker"
+  short_description: >-
+    Bounded implementation and extraction worker that directly spawns the
+    official Z.AI GLM-5.3 model with an explicit writable scope, validation
+    commands, and ESCALATE_TO_GPT stop conditions.
+  default_prompt: >-
+    Use $use-zai-glm53-worker to run this bounded coding assignment directly
+    against the Z.AI GLM-5.3 model: implement only within the explicit writable
+    scope, run the requested validation, and stop with ESCALATE_TO_GPT on any
+    design, scope, safety, or approval-boundary issue.

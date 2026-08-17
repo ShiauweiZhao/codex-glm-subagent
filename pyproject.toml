@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-glm-subagent"
+version = "0.1.0"
+description = "Conservative standalone agent installer/runtime for the Z.AI GLM-5.3 bounded coding worker."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Shiaowei Zhao" }]
+keywords = ["codex", "glm-5.3", "agent", "installer"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ShiauweiZhao/codex-glm-subagent"
+Repository = "https://github.com/ShiauweiZhao/codex-glm-subagent"
+Issues = "https://github.com/ShiauweiZhao/codex-glm-subagent/issues"
+
+[tool.setuptools]
+packages = ["codex_glm53_subagent"]

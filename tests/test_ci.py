@@ -4,6 +4,7 @@ import unittest
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+MAKEFILE = REPO / "Makefile"
 
 
 class GitHubActionsContractTest(unittest.TestCase):
@@ -25,6 +26,12 @@ class GitHubActionsContractTest(unittest.TestCase):
         self.assertNotIn("ZAI_API_KEY", text)
         self.assertNotIn("experimental_bearer_token", text)
         self.assertNotIn("docker", text.lower())
+
+    def test_makefile_uses_full_local_validation(self):
+        text = MAKEFILE.read_text(encoding="utf-8")
+        self.assertIn("-m unittest discover -s tests -v", text)
+        self.assertIn("-m compileall -q src tests", text)
+        self.assertNotIn("-p 'test_installer.py'", text)
 
 
 if __name__ == "__main__":

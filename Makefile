@@ -10,10 +10,10 @@ uninstall:
 	$(INSTALL_PY) uninstall
 
 test:
-	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -p 'test_installer.py' -v
+	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
 
 compile:
-	$(PYTHON) -m compileall -q src/codex_glm53_subagent tests/test_installer.py
+	$(PYTHON) -m compileall -q src tests
 
 clean:
 	$(PYTHON) -c "import shutil,pathlib; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"

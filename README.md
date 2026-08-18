@@ -9,9 +9,16 @@ ChatGPT login completely unchanged while registering a standalone child worker
 named `zai_glm53_worker` that runs model `glm-5.3` through Z.AI.
 
 The child talks natively over the Codex Responses wire format directly to
-`https://open.bigmodel.cn/api/v1` with `wire_api=responses`. There is no
-local bridge, no Chat conversion, no SQLite state, no daemon, no Hook, no MCP
-server, no second Codex CLI, and no runtime provider or model fallback.
+`https://open.bigmodel.cn/api/v1` with `wire_api=responses`. The parent delivers
+each complete assignment through an installed one-shot plaintext
+`SubagentStart` Hook. There is no local bridge, no Chat conversion, no SQLite
+service state, no daemon, no MCP server, no second Codex CLI, and no runtime
+provider or model fallback.
+
+Hook is required independently of bridge: the Hook fixes the cross-provider
+assignment carrier, while a bridge would only adapt an incompatible wire API.
+GLM-5.3 already supports the Responses wire directly, so it needs the Hook but
+does not need a bridge.
 
 ## Boundaries
 
@@ -31,7 +38,12 @@ server, no second Codex CLI, and no runtime provider or model fallback.
 ```
 Parent Codex (selected GPT + ChatGPT login)
         |
-        | spawn with fork_turns=none, reasoning_effort=max
+        | stage complete assignment through stdin
+        v
+one-shot plaintext SubagentStart Hook
+        |
+        | additional developer context + native spawn
+        | fork_turns=none, reasoning_effort=max
         v
 zai_glm53_worker (model glm-5.3)
         |
@@ -40,8 +52,10 @@ zai_glm53_worker (model glm-5.3)
 https://open.bigmodel.cn/api/v1
 ```
 
-Single explicit transport path, native and direct. No runtime fallback exists in
-the child.
+The data plane remains a single native and direct transport path. The Hook is a
+control-plane compatibility layer for provider-internal ciphertext; it is not a
+model bridge and does not change the Z.AI request path. No runtime fallback
+exists in the child.
 
 Official source:
 https://docs.bigmodel.cn/cn/coding-plan/tool/codex (and its markdown endpoint).
@@ -66,10 +80,12 @@ Run the installer from the repository root:
 python3 scripts/install.py install
 ```
 
-The installer registers the standalone child and helper tooling. It never edits
-`~/.codex/config.toml` or `auth.json`; the parent top-level provider and login
-remain untouched. No API key is written into the repository, chat, issues,
-command arguments, or screenshots.
+The installer registers the standalone child, helper tooling, the plaintext
+handoff script, and one exact `^zai_glm53_worker$` `SubagentStart` matcher in
+`~/.codex/hooks.json`. It preserves unrelated Hook entries and never forges the
+Hook trust decision. It never edits `~/.codex/config.toml` or `auth.json`; the
+parent top-level provider and login remain untouched. No API key is written into
+the repository, chat, issues, command arguments, or screenshots.
 
 ## macOS Configure
 
@@ -99,10 +115,17 @@ installer manages, and never placed in the repository or command arguments.
 
 ## Use / Delegation
 
+- After install, open `/hooks`, verify the matcher is exactly
+  `^zai_glm53_worker$`, verify its command points to
+  `codex-zai-glm53-subagent/plaintext_handoff.py --mode hook`, trust it, and
+  start a new Codex task so the updated agent, skill, and Hook policy reload.
 - The `$use-zai-glm53-worker` skill requires `fork_turns=none` and
-  `reasoning_effort=max`.
-- Assignments are self-contained, direct spawns with an explicit writable scope
-  and validation commands.
+  `reasoning_effort=max`. It stages one complete assignment through stdin before
+  calling the native spawn route; a failed stage must never be followed by a
+  spawn.
+- Assignments are self-contained and include an explicit writable scope and
+  validation commands. The child spawn message only identifies the trusted
+  one-shot Hook; the Hook injects the actual assignment.
 - The skill and worker warn about the Z.AI data boundary.
 - No fallback provider or model is used; if a step is outside the worker's
   contract it returns `ESCALATE_TO_GPT`.

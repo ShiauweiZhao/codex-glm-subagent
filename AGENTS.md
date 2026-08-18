@@ -6,6 +6,8 @@ does decisions, review, final verification, Git, external mutation, credentials,
 or approval requests. It returns `ESCALATE_TO_GPT` for unresolved design, scope
 expansion, safety/consequential judgment, missing scope/oracle, or approval
 boundary. GPT keeps all consequential work and Git.
+Cross-provider assignment delivery always uses the installed one-shot plaintext
+`SubagentStart` Hook; the Z.AI data plane remains native Responses with no bridge.
 <!-- codex-glm-subagent:end -->
 
 ## Repository instructions (GLM implementation worker)
@@ -19,9 +21,12 @@ boundary. GPT keeps all consequential work and Git.
 - 需求澄清、分析、审计、评估、设计与架构、接口/行为决策、任务分解、集成点、测试缺口、
   代码评审、最终验证、集成决策，以及 Git 操作，都保留在预选的 GPT 父代理上。子代理不
   commit、不 push、不建 PR、不做最终 review/验证、不处理凭据、不越权请求审批。
-- 传输只有一条：Codex Responses → `https://open.bigmodel.cn/api/v1`，
+- 数据面只有一条：Codex Responses → `https://open.bigmodel.cn/api/v1`，
   `wire_api=responses`，原生直连，`no fallback`（无本地桥、无 Chat 转换、无 SQLite、
-  无 daemon、无 Hook、无 MCP、无第二个 CLI、无 provider/model 运行时回退）。
+  无 daemon、无 MCP、无第二个 CLI、无 provider/model 运行时回退）。控制面无论是否
+  需要 bridge 都必须使用一次性 plaintext `SubagentStart` Hook 交付 assignment。
+- spawn 或排障 `zai_glm53_worker` 前必须使用 `$use-zai-glm53-worker`，先 stage 成功，
+  再以 `fork_turns="none"` 创建 child；stage 失败不得 spawn，不依赖 follow-up 传任务。
 - 绝不读取、打印、持久化到仓库，或放入命令行参数的密钥值：macOS 的 Login Keychain、
   Linux 的 `ZAI_API_KEY`。`no API keys` 进仓库/聊天/issue/命令参数/截图。
 - 行为变更先写测试（`tests first`），本地验证命令：

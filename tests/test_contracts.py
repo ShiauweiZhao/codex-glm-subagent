@@ -95,6 +95,13 @@ class Glm53ContractsTest(unittest.TestCase):
         ):
             self.assertIn(marker, inst)
 
+    def test_developer_instructions_require_plaintext_handoff(self):
+        inst = tomllib.loads(read("agents", "zai-glm53-worker.toml"))[
+            "developer_instructions"
+        ]
+        self.assertIn("trusted plaintext handoff", inst)
+        self.assertIn("MISSING_PLAINTEXT_HANDOFF", inst)
+
     def test_catalog_json_schema(self):
         data = json.loads(read("agents", "glm-5.3-models.json"))
         self.assertEqual(list(data.keys()), ["models"])
@@ -142,6 +149,15 @@ class Glm53ContractsTest(unittest.TestCase):
         body = parts[2]
         for marker in ("writable scope", "validation", "ESCALATE_TO_GPT", "stop condition"):
             self.assertIn(marker, body)
+        for marker in (
+            "SubagentStart",
+            "plaintext_handoff.py --mode stage",
+            'agent type `zai_glm53_worker`',
+            '`fork_turns="none"`',
+            "Never spawn after a failed stage",
+        ):
+            self.assertIn(marker, body)
+        self.assertIn("No bridge", body)
 
     def test_agent_yaml_schema(self):
         raw = read("skills", "use-zai-glm53-worker", "agents", "openai.yaml")

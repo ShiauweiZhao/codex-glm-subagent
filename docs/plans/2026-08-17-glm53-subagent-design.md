@@ -12,9 +12,11 @@ registering a standalone child `zai_glm53_worker` running model `glm-5.3`.
 ## Transport
 
 Native Codex Responses directly to `https://open.bigmodel.cn/api/v1` with
-`wire_api=responses`. No localhost bridge, no Chat conversion, no SQLite, no
-daemon, no Hook, no MCP, no second Codex CLI, and no runtime provider/model
-fallback.
+`wire_api=responses`. Assignment delivery uses a one-shot plaintext
+`SubagentStart` Hook because that control-plane requirement is independent of
+whether the model data plane needs a bridge. GLM needs no bridge: there is no
+Chat conversion, SQLite service state, daemon, MCP, second Codex CLI, or runtime
+provider/model fallback.
 
 Official source: https://docs.bigmodel.cn/cn/coding-plan/tool/codex (and its
 markdown endpoint).
@@ -37,8 +39,9 @@ markdown endpoint).
   Apple's Security.framework (Python ctypes, no keychain/security CLI).
 - Linux: API key provided through the `ZAI_API_KEY` environment variable.
 - Skill `$use-zai-glm53-worker`: requires `fork_turns=none` and
-  `reasoning_effort=max`, self-contained direct spawn assignment, Z.AI data
-  boundary warning, no fallback. No paid/native smoke without explicit user
+  `reasoning_effort=max`, stages a self-contained assignment through stdin, then
+  native-spawns the exact worker so the Hook injects it. Includes the Z.AI data
+  boundary warning and no fallback. No paid/native smoke without explicit user
   authorization.
 
 ## Security

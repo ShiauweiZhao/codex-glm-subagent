@@ -1,10 +1,10 @@
 """Conservative standalone installer/runtime for the GLM-5.3 worker agent.
 
-Installs the agent catalog, skill tree, runtime package, rendered credential
-wrapper, and a SHA256 manifest into distinct coexistence-safe destinations
-under ``~/.codex``. No Hook, bridge, service, daemon, SQLite, network, or
-provider fallback is installed; ``config.toml`` and ``auth.json`` are never
-created, read, or modified.
+Installs the agent catalog, skill tree, one-shot plaintext handoff Hook, runtime
+package, rendered credential wrapper, and a SHA256 manifest into distinct
+coexistence-safe destinations under ``~/.codex``. No bridge, service, daemon,
+SQLite, network, or provider fallback is installed; ``config.toml`` and
+``auth.json`` are never created, read, or modified.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from typing import Any, Callable, Optional
 JSON = dict[str, Any]
 
 AGENT_NAME = "zai_glm53_worker"
+HOOK_MATCHER = f"^{AGENT_NAME}$"
 AGENTS_START = "<!-- codex-glm-subagent:start -->"
 AGENTS_END = "<!-- codex-glm-subagent:end -->"
 MANIFEST_RELATIVE = Path("zai-glm53-subagent") / "install-manifest.json"
@@ -102,6 +103,13 @@ def _managed_sources(repo_root: Path) -> list[tuple[Path, Path, int]]:
         (
             repo_root / "agents" / "glm-5.3-models.json",
             Path("zai-glm53-subagent") / "glm-5.3-models.json",
+            0o600,
+        ),
+        (
+            repo_root / "hooks" / "plaintext_handoff.py",
+            Path("hooks")
+            / "codex-zai-glm53-subagent"
+            / "plaintext_handoff.py",
             0o600,
         ),
     ]
@@ -211,8 +219,68 @@ def _replace_agents_block(existing: str, block: Optional[str]) -> str:
     return prefix + block.rstrip() + "\n"
 
 
+def _load_hooks(path: Path) -> JSON:
+    if not path.exists():
+        return {"description": "Codex user hooks", "hooks": {}}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"cannot parse existing hooks.json: {error}") from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("hooks", {}), dict):
+        raise RuntimeError("existing hooks.json must contain an object-valued hooks field")
+    payload.setdefault("hooks", {})
+    return payload
+
+
+def _hook_entry(script_path: Path) -> JSON:
+    escaped = _escaped(str(script_path))
+    return {
+        "matcher": HOOK_MATCHER,
+        "hooks": [
+            {
+                "type": "command",
+                "command": f'python3 "{escaped}" --mode hook',
+                "timeout": 10,
+                "statusMessage": "Delivering the staged Z.AI GLM-5.3 assignment",
+                "additionalContextLimit": 0,
+            }
+        ],
+    }
+
+
+def _merge_hook(payload: JSON, entry: JSON) -> JSON:
+    events = payload.setdefault("hooks", {})
+    current = events.get("SubagentStart") or []
+    if not isinstance(current, list):
+        raise RuntimeError("hooks.SubagentStart must be a list")
+    kept = [
+        item
+        for item in current
+        if not isinstance(item, dict) or item.get("matcher") != HOOK_MATCHER
+    ]
+    events["SubagentStart"] = kept + [entry]
+    return payload
+
+
+def _remove_hook(payload: JSON) -> JSON:
+    events = payload.setdefault("hooks", {})
+    current = events.get("SubagentStart") or []
+    if isinstance(current, list):
+        kept = [
+            item
+            for item in current
+            if not isinstance(item, dict) or item.get("matcher") != HOOK_MATCHER
+        ]
+        if kept:
+            events["SubagentStart"] = kept
+        else:
+            events.pop("SubagentStart", None)
+    return payload
+
+
 def _prune_empty_owned_dirs(codex_home: Path) -> None:
     owned = [
+        Path("hooks") / "codex-zai-glm53-subagent",
         Path("zai-glm53-subagent") / "runtime" / "codex_glm53_subagent",
         Path("zai-glm53-subagent") / "runtime",
         Path("zai-glm53-subagent") / "bin",
@@ -239,6 +307,7 @@ def install(
     sources = _managed_sources(repo_root)
     manifest_path = _managed_target(codex_home, MANIFEST_RELATIVE)
     agents_path = _managed_target(codex_home, "AGENTS.md")
+    hooks_path = _managed_target(codex_home, "hooks.json")
     old = _load_manifest(manifest_path)
     old_files = old.get("managed_files") or {}
     if not isinstance(old_files, dict):
@@ -264,6 +333,15 @@ def install(
     )
     block = (repo_root / "snippets" / "AGENTS.md").read_text(encoding="utf-8")
     merged_agents = _replace_agents_block(existing_agents, block)
+    hooks = _merge_hook(
+        _load_hooks(hooks_path),
+        _hook_entry(
+            codex_home
+            / "hooks"
+            / "codex-zai-glm53-subagent"
+            / "plaintext_handoff.py"
+        ),
+    )
 
     changed = False
     manifest_files: dict[str, str] = {}
@@ -272,10 +350,13 @@ def install(
         manifest_files[str(relative)] = _sha256(data)
 
     changed = _atomic_write(agents_path, merged_agents.encode("utf-8"), 0o600) or changed
+    hooks_data = (json.dumps(hooks, ensure_ascii=False, indent=2) + "\n").encode()
+    changed = _atomic_write(hooks_path, hooks_data, 0o600) or changed
 
     manifest: JSON = {
         "schema_version": 1,
         "agent": AGENT_NAME,
+        "hook_matcher": HOOK_MATCHER,
         "managed_files": manifest_files,
     }
     manifest_data = (
@@ -329,10 +410,15 @@ def uninstall(
         removable.append((relative, target))
 
     agents_path = _managed_target(codex_home, "AGENTS.md")
+    hooks_path = _managed_target(codex_home, "hooks.json")
     cleaned_agents: Optional[bytes] = None
     if agents_path.exists():
         cleaned = _replace_agents_block(agents_path.read_text(encoding="utf-8"), None)
         cleaned_agents = cleaned.encode("utf-8")
+    cleaned_hooks: Optional[bytes] = None
+    if hooks_path.exists():
+        hooks = _remove_hook(_load_hooks(hooks_path))
+        cleaned_hooks = (json.dumps(hooks, ensure_ascii=False, indent=2) + "\n").encode()
 
     if purge_secrets and platform == "darwin" and purge_fn is not None:
         purge_fn(codex_home)
@@ -344,6 +430,8 @@ def uninstall(
 
     if cleaned_agents is not None:
         _atomic_write(agents_path, cleaned_agents, 0o600)
+    if cleaned_hooks is not None:
+        _atomic_write(hooks_path, cleaned_hooks, 0o600)
 
     if manifest_path.exists():
         manifest_path.unlink()

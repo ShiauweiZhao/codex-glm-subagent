@@ -68,6 +68,10 @@ SNIPPET = (
     "Managed GLM-5.3 standalone worker block.\n"
     "<!-- codex-glm-subagent:end -->\n"
 )
+HOOK_SCRIPT = '''\
+#!/usr/bin/env python3
+AGENT_TYPE = "zai_glm53_worker"
+'''
 
 
 def make_repo(root: Path) -> Path:
@@ -96,6 +100,10 @@ def make_repo(root: Path) -> Path:
     snippets = root / "snippets"
     snippets.mkdir()
     (snippets / "AGENTS.md").write_text(SNIPPET, encoding="utf-8")
+
+    hooks = root / "hooks"
+    hooks.mkdir()
+    (hooks / "plaintext_handoff.py").write_text(HOOK_SCRIPT, encoding="utf-8")
     return root
 
 
@@ -222,14 +230,71 @@ class InstallBehaviorTest(InstallerTestBase):
         self.assertEqual((self.codex / "config.toml").read_text(), "SENTINEL_CONFIG")
         self.assertEqual((self.codex / "auth.json").read_text(), "SENTINEL_AUTH")
 
-    def test_no_hooks_inline_token_or_fallback(self):
+    def test_installs_exact_subagent_start_hook_without_inline_token_or_fallback(self):
         self.install("darwin")
-        self.assertFalse((self.codex / "hooks.json").exists())
+        hooks_path = self.codex / "hooks.json"
+        self.assertTrue(hooks_path.is_file())
+        payload = json.loads(hooks_path.read_text(encoding="utf-8"))
+        entries = payload["hooks"]["SubagentStart"]
+        matches = [
+            entry
+            for entry in entries
+            if entry.get("matcher") == "^zai_glm53_worker$"
+        ]
+        self.assertEqual(len(matches), 1)
+        installed_hook = (
+            self.codex
+            / "hooks"
+            / "codex-zai-glm53-subagent"
+            / "plaintext_handoff.py"
+        )
+        self.assertTrue(installed_hook.is_file())
+        command = matches[0]["hooks"][0]["command"]
+        self.assertIn(str(installed_hook), command)
+        self.assertTrue(command.endswith(" --mode hook"))
+        self.assertEqual(matches[0]["hooks"][0]["additionalContextLimit"], 0)
         text = (self.codex / "agents" / "zai-glm53-worker.toml").read_text(encoding="utf-8")
         self.assertNotIn("experimental_bearer_token", text)
         self.assertNotIn("fallback", text.lower())
         data = tomllib.loads(text)
         self.assertEqual(list(data["model_providers"].keys()), ["zai_glm53"])
+
+    def test_hook_merge_and_uninstall_preserve_unrelated_entries(self):
+        self.codex.mkdir()
+        hooks_path = self.codex / "hooks.json"
+        unrelated = {
+            "matcher": "^other_worker$",
+            "hooks": [{"type": "command", "command": "other-hook"}],
+        }
+        hooks_path.write_text(
+            json.dumps(
+                {
+                    "description": "user hooks",
+                    "hooks": {"SubagentStart": [unrelated]},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        self.install("darwin")
+        installed = json.loads(hooks_path.read_text(encoding="utf-8"))
+        self.assertEqual(installed["description"], "user hooks")
+        self.assertEqual(
+            [entry["matcher"] for entry in installed["hooks"]["SubagentStart"]],
+            ["^other_worker$", "^zai_glm53_worker$"],
+        )
+
+        installer.uninstall(self.codex, platform="darwin")
+        uninstalled = json.loads(hooks_path.read_text(encoding="utf-8"))
+        self.assertEqual(uninstalled["hooks"]["SubagentStart"], [unrelated])
+        self.assertFalse(
+            (
+                self.codex
+                / "hooks"
+                / "codex-zai-glm53-subagent"
+                / "plaintext_handoff.py"
+            ).exists()
+        )
 
     def test_executable_modes(self):
         self.install("darwin")

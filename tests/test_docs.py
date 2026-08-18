@@ -102,6 +102,14 @@ class DocsContractTests(unittest.TestCase):
         self.assertNotIn("localhost", readme.lower())
         self.assertIn("no fallback", readme.lower())
 
+    def test_readme_requires_hook_independently_of_bridge(self):
+        readme = read("README.md")
+        self.assertIn("SubagentStart", readme)
+        self.assertIn("plaintext", readme.lower())
+        self.assertIn("Hook is required independently of bridge", readme)
+        self.assertIn("/hooks", readme)
+        self.assertIn("^zai_glm53_worker$", readme)
+
     def test_readme_installer_never_touches_config_or_auth(self):
         readme = read("README.md")
         self.assertIn("config.toml", readme)
@@ -115,6 +123,8 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("open.bigmodel.cn", doc)
         self.assertIn("glm-5.3", doc)
         self.assertIn("no fallback", doc.lower())
+        self.assertIn("Hook is required independently of bridge", doc)
+        self.assertIn("provider-internal ciphertext", doc)
 
     def test_agents_managed_block_intact(self):
         agents = read("AGENTS.md")
@@ -139,6 +149,8 @@ class DocsContractTests(unittest.TestCase):
         notices = read("THIRD_PARTY_NOTICES.md")
         self.assertIn("Apache-2.0", notices)
         self.assertIn("codex-opencode-go-subagent", notices)
+        self.assertIn("Utopia-V/codex-deepseek-subagent", notices)
+        self.assertIn("Copyright (c) 2026 Utopia-V", notices)
 
     def test_third_party_notices_security_framework(self):
         notices = read("THIRD_PARTY_NOTICES.md")

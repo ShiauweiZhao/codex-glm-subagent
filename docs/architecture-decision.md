@@ -6,7 +6,8 @@
 model `glm-5.3`) alongside a parent Codex that keeps its selected GPT provider
 and ChatGPT login completely unchanged. The child needs a single, explicit
 transport to Z.AI that is native and direct, with no runtime provider or model
-fallback.
+fallback. The parent also needs a bounded availability policy for explicit GLM
+quota/token/rate-limit exhaustion.
 
 ## Decision
 
@@ -16,6 +17,12 @@ assignment is staged once and injected as developer context by an exact-match
 plaintext `SubagentStart` Hook before native spawn. There is no bridge, no Chat
 conversion, no SQLite service state, no daemon, no MCP server, no second Codex
 CLI, and no runtime provider or model fallback.
+
+Eligible bounded implementation defaults to GLM. Only an explicit GLM
+quota/token/rate-limit exhaustion signal allows parent orchestration to reissue
+the same self-contained job to `agent_type="worker"`,
+`model="gpt-5.6-luna"`, `reasoning_effort="max"`, and `fork_turns="none"`.
+This Luna path is not part of the GLM child or Z.AI data plane.
 
 Hook is required independently of bridge. A bridge adapts wire protocols; this
 Hook adapts the assignment carrier. The GLM endpoint already accepts Responses,
@@ -47,8 +54,21 @@ https://open.bigmodel.cn/api/v1
 
 ## Consequences
 
-- **No fallback**: if a step is outside the worker contract, the child returns
-  `ESCALATE_TO_GPT`; it never silently switches provider or model.
+- **No runtime fallback**: if a step is outside the worker contract, the child
+  returns `ESCALATE_TO_GPT`; it never silently switches provider or model. The
+  narrow Luna path is an explicit parent orchestration reroute after verified
+  capacity exhaustion; no fallback occurs inside the child.
+- **No error masking**: Hook trust, failed staging, authentication, permission,
+  data-boundary, model/account compatibility, malformed-assignment,
+  missing-callback, and
+  `ESCALATE_TO_GPT` failures do not select Luna.
+- **Recovery**: a later ordinary eligible job may try GLM again and restore
+  GLM-first routing after success. There is no paid recovery probe merely to
+  detect returned capacity.
+- **Standing authorization**: an explicit user or applicable user/project
+  `AGENTS.md` instruction may authorize bounded private source handoff for its
+  stated scope without per-assignment repetition. It never covers credentials,
+  secrets, personal/regulated data, or out-of-scope source.
 - **No bridge**: the child is not a local HTTP service and holds no persistent
   SQLite/daemon state. The Hook only carries a short-lived plaintext assignment;
   it does not proxy model traffic.

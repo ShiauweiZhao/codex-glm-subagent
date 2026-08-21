@@ -159,6 +159,44 @@ class Glm53ContractsTest(unittest.TestCase):
             self.assertIn(marker, body)
         self.assertIn("No bridge", body)
 
+    def test_skill_parent_routing_and_luna_reroute_contract(self):
+        body = read("skills", "use-zai-glm53-worker", "SKILL.md")
+        lowered = body.lower()
+        normalized = " ".join(lowered.split())
+        for marker in (
+            "requirements",
+            "planning",
+            "design",
+            "architecture",
+            "task decomposition",
+            "review",
+            "final verification",
+            "git",
+        ):
+            self.assertIn(marker, normalized)
+        self.assertIn("standing authorization", normalized)
+        self.assertIn("do not ask again", normalized)
+        self.assertIn("private source", normalized)
+        self.assertIn("quota", normalized)
+        self.assertIn("token", normalized)
+        self.assertIn("rate-limit", normalized)
+        self.assertIn('agent_type="worker"', body)
+        self.assertIn('model="gpt-5.6-luna"', body)
+        self.assertIn('reasoning_effort="max"', body)
+        self.assertIn('fork_turns="none"', body)
+        self.assertIn("not a runtime provider fallback", normalized)
+        self.assertIn("no paid recovery probe", normalized)
+        for marker in (
+            "hook trust",
+            "authentication",
+            "permission",
+            "data-boundary",
+            "model/account compatibility",
+            "missing callback",
+            "escalate_to_gpt",
+        ):
+            self.assertIn(marker, normalized)
+
     def test_agent_yaml_schema(self):
         raw = read("skills", "use-zai-glm53-worker", "agents", "openai.yaml")
         data = parse_simple_yaml(raw)

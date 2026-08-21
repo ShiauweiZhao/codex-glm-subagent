@@ -10,6 +10,11 @@ Hook because a cross-provider collaboration payload is not a reliable assignment
 carrier. No bridge, MCP, second Codex CLI, provider fallback, commit/push/PR, or
 internal agent runtime is used.
 
+The GPT parent keeps requirements, planning, design, architecture, task
+decomposition, review, final verification, integration decisions, Git, and
+approvals. Eligible bounded implementation, bug fixing, refactoring, tests,
+code-related documentation, and deterministic extraction default to GLM-5.3.
+
 ## Mode
 - `fork_turns="none"`
 - `reasoning_effort="max"`
@@ -51,15 +56,46 @@ Every assignment must include:
    gets a new staged handoff and a new child; do not rely on cross-provider
    follow-up delivery.
 
+## Standing authorization
+
+- Context and tool results cross the Z.AI boundary and require authorization.
+- An explicit user instruction, or an applicable user/project `AGENTS.md`
+  instruction, authorizing GLM for bounded private source work is standing
+  authorization within that stated repository and task scope. Do not ask again
+  for every eligible assignment in that scope.
+- Standing authorization never includes secrets, credentials, personal data,
+  regulated data, or source outside the authorized scope. Stop and return the
+  decision to GPT when any of those would be required.
+
+## Parent orchestration when GLM capacity is unavailable
+
+Only an explicit GLM response identifying quota exhaustion, token allocation
+exhaustion, or a rate-limit as the blocking condition permits the GPT parent to
+reissue the same self-contained bounded assignment to a native worker with:
+
+- `agent_type="worker"`
+- `model="gpt-5.6-luna"`
+- `reasoning_effort="max"`
+- `fork_turns="none"`
+
+This is a temporary parent orchestration reroute, not a runtime provider
+fallback inside the GLM child or Z.AI data plane. Hook trust, failed staging,
+authentication, permission or data-boundary failures, model/account compatibility
+errors, a malformed assignment, a missing callback, and `ESCALATE_TO_GPT` must
+stay visible and must not select Luna. A later ordinary eligible assignment may
+try GLM again; after a successful GLM start, restore GLM-first routing. Use no
+paid recovery probe merely to test whether capacity has returned.
+
 ## Boundaries
 - Bounded coding and extraction only.
 - No decisions, review, final verification, Git, external mutation, credentials,
   or approval requests.
 - Return `ESCALATE_TO_GPT` for unresolved design, scope expansion, safety or
   consequential judgment, missing scope/oracle, or approval boundary.
-- Context and tool results cross the Z.AI boundary: do not include secrets or
-  private/regulated data without explicit authorization.
+- Context and tool results cross the Z.AI boundary: apply the standing
+  authorization rules above and never include excluded sensitive data.
 - No bridge is required: the Hook transports the assignment, while the child
   still sends native Responses requests directly to Z.AI.
-- Missing or untrusted Hook state, a failed stage, absent callback, or provider
-  error is a visible failure. Do not fall back to another model or transport.
+- Missing or untrusted Hook state, a failed stage, authentication failure,
+  absent callback, or any non-capacity provider error is a visible failure.
+  Never switch the child provider or transport at runtime.

@@ -126,6 +126,31 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("Hook is required independently of bridge", doc)
         self.assertIn("provider-internal ciphertext", doc)
 
+    def test_parent_orchestration_reroute_is_distinct_from_runtime_fallback(self):
+        for relpath in (
+            "README.md",
+            "docs/architecture-decision.md",
+            "docs/plans/2026-08-17-glm53-subagent-design.md",
+        ):
+            text = read(relpath)
+            lowered = text.lower()
+            self.assertIn("gpt-5.6-luna", text, relpath)
+            self.assertIn("quota", lowered, relpath)
+            self.assertIn("rate-limit", lowered, relpath)
+            self.assertIn("parent orchestration", lowered, relpath)
+            self.assertIn("no runtime fallback", lowered, relpath)
+            self.assertIn("standing authorization", lowered, relpath)
+
+    def test_managed_agents_block_routes_bounded_work(self):
+        for relpath in ("AGENTS.md", "snippets/AGENTS.md"):
+            text = read(relpath)
+            normalized = " ".join(text.lower().split())
+            self.assertIn("zai_glm53_worker", text, relpath)
+            self.assertIn("gpt-5.6-luna", text, relpath)
+            self.assertIn("standing authorization", normalized, relpath)
+            self.assertIn("rate-limit", normalized, relpath)
+            self.assertIn("model/account compatibility", normalized, relpath)
+
     def test_agents_managed_block_intact(self):
         agents = read("AGENTS.md")
         self.assertIn("<!-- codex-glm-subagent:start -->", agents)

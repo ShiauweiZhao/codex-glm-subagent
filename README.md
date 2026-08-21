@@ -13,7 +13,9 @@ The child talks natively over the Codex Responses wire format directly to
 each complete assignment through an installed one-shot plaintext
 `SubagentStart` Hook. There is no local bridge, no Chat conversion, no SQLite
 service state, no daemon, no MCP server, no second Codex CLI, and no runtime
-provider or model fallback.
+provider or model fallback inside the GLM child or Z.AI data plane. An explicit
+GLM quota/token/rate-limit failure may instead trigger a temporary parent
+orchestration reroute to a native `gpt-5.6-luna` worker.
 
 Hook is required independently of bridge: the Hook fixes the cross-provider
 assignment carrier, while a bridge would only adapt an incompatible wire API.
@@ -29,6 +31,10 @@ does not need a bridge.
   only, with an explicit writable scope and validation commands, and returns
   `ESCALATE_TO_GPT` for unresolved design, scope expansion, safety or
   consequential judgment, missing scope/oracle, or approval boundaries.
+- Eligible bounded implementation defaults to GLM-5.3. Only explicit
+  quota/token/rate-limit exhaustion permits the parent to reissue that same
+  self-contained job to `agent_type="worker"`, `model="gpt-5.6-luna"`,
+  `reasoning_effort="max"`, `fork_turns="none"`.
 - Install (`install`), configure (`configure`), and a live smoke are separate
   activities. This repository and its installer never change the parent
   top-level provider, model, or ChatGPT login.
@@ -55,7 +61,14 @@ https://open.bigmodel.cn/api/v1
 The data plane remains a single native and direct transport path. The Hook is a
 control-plane compatibility layer for provider-internal ciphertext; it is not a
 model bridge and does not change the Z.AI request path. No runtime fallback
-exists in the child.
+exists in the child: no fallback provider, model, or credential switch can occur
+there.
+
+The Luna path is parent orchestration, not part of the diagrammed Z.AI data
+plane and not a runtime fallback. Hook trust, staging, authentication,
+permission, data-boundary, model/account compatibility, assignment,
+missing-callback, and
+`ESCALATE_TO_GPT` failures stay visible instead of selecting Luna.
 
 Official source:
 https://docs.bigmodel.cn/cn/coding-plan/tool/codex (and its markdown endpoint).
@@ -127,8 +140,16 @@ installer manages, and never placed in the repository or command arguments.
   validation commands. The child spawn message only identifies the trusted
   one-shot Hook; the Hook injects the actual assignment.
 - The skill and worker warn about the Z.AI data boundary.
-- No fallback provider or model is used; if a step is outside the worker's
-  contract it returns `ESCALATE_TO_GPT`.
+- An explicit user instruction, or applicable user/project `AGENTS.md`, may
+  grant standing authorization for bounded private source handoff within its
+  stated scope. Do not ask again for each eligible assignment. Secrets,
+  credentials, personal/regulated data, and out-of-scope source remain excluded.
+- There is no runtime fallback in the GLM child. After an explicit
+  quota/token/rate-limit exhaustion signal, the GPT parent may temporarily
+  reissue the same bounded job to the Luna worker parameters listed above.
+  Other failures and `ESCALATE_TO_GPT` return to GPT without rerouting.
+- A later ordinary eligible job may try GLM again; a successful GLM start
+  restores GLM-first routing. Use no paid recovery probe just to test capacity.
 - A paid or native live smoke requires explicit user authorization and is never
   triggered incidentally.
 
@@ -176,8 +197,8 @@ explicitly authorized real GLM child smoke has been performed (so it is **not**
   screenshots.
 - macOS stores the key in the Login Keychain; Linux uses `ZAI_API_KEY` in the
   environment.
-- No runtime fallback means there is no path that silently switches provider or
-  credentials.
+- No runtime fallback means the GLM child never silently switches provider or
+  credentials; the narrow, explicit parent orchestration reroute is auditable.
 - See SECURITY.md for reporting guidance.
 
 ## License

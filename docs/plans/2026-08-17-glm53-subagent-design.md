@@ -16,7 +16,9 @@ Native Codex Responses directly to `https://open.bigmodel.cn/api/v1` with
 `SubagentStart` Hook because that control-plane requirement is independent of
 whether the model data plane needs a bridge. GLM needs no bridge: there is no
 Chat conversion, SQLite service state, daemon, MCP, second Codex CLI, or runtime
-provider/model fallback.
+provider/model fallback. Explicit GLM quota/token/rate-limit exhaustion may be
+handled outside that data plane by a temporary parent orchestration reroute to
+`gpt-5.6-luna`.
 
 Official source: https://docs.bigmodel.cn/cn/coding-plan/tool/codex (and its
 markdown endpoint).
@@ -29,6 +31,19 @@ markdown endpoint).
 - `zai_glm53_worker` does bounded implementation/extraction only, with an
   explicit writable scope and validation commands, and returns
   `ESCALATE_TO_GPT` for anything outside its contract.
+- Eligible bounded jobs default to GLM. Only verified quota/token/rate-limit
+  exhaustion permits the GPT parent to reissue the same self-contained job to
+  `agent_type="worker"`, `model="gpt-5.6-luna"`,
+  `reasoning_effort="max"`, `fork_turns="none"`. This parent orchestration is
+  no runtime fallback inside the GLM worker or Z.AI provider.
+- Hook trust, staging, authentication, permission, data-boundary, model/account
+  compatibility, assignment, missing-callback, and `ESCALATE_TO_GPT` failures
+  stay visible and never select Luna. Retry GLM through a later ordinary eligible
+  job; use no paid recovery probe.
+- An explicit user or applicable user/project `AGENTS.md` instruction is
+  standing authorization for bounded private source handoff only in its stated
+  scope. It excludes secrets, credentials, personal/regulated data, and
+  out-of-scope source.
 
 ## Delivery components
 
@@ -41,8 +56,8 @@ markdown endpoint).
 - Skill `$use-zai-glm53-worker`: requires `fork_turns=none` and
   `reasoning_effort=max`, stages a self-contained assignment through stdin, then
   native-spawns the exact worker so the Hook injects it. Includes the Z.AI data
-  boundary warning and no fallback. No paid/native smoke without explicit user
-  authorization.
+  boundary warning and no runtime fallback inside GLM. No paid/native smoke
+  without explicit user authorization.
 
 ## Security
 

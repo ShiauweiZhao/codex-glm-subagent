@@ -53,8 +53,11 @@ code):
 
 ## Dependencies
 
-- Python 3.11+ standard library only for the installer and tests. No third-party
-  runtime packages are required.
+- The base installer and tests use the Python 3.11+ standard library only. They
+  require no third-party Python runtime package.
+- The recovery helper recognizes a retired side-by-side installation of the
+  Apache-2.0-licensed official `@openai/codex@0.148.0-alpha.9` package. Current
+  installation does not download, activate, or redistribute that package.
 - macOS uses the system Keychain through Apple's Security.framework (via Python
   ctypes) for credential storage; no keychain/security CLI tool is required.
 

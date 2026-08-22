@@ -100,6 +100,54 @@ Hook trust decision. It never edits `~/.codex/config.toml` or `auth.json`; the
 parent top-level provider and login remain untouched. No API key is written into
 the repository, chat, issues, command arguments, or screenshots.
 
+## Codex Runtime Compatibility
+
+The official [Codex subagents documentation](https://developers.openai.com/codex/multi-agent/)
+says personal custom agents belong under `~/.codex/agents/` and are loaded as
+configuration layers for spawned sessions. The official
+[configuration reference](https://developers.openai.com/codex/config-reference/)
+classifies `model_provider` and `model_providers` as machine-local provider
+settings that must live at user level rather than in project-scoped config.
+This repository therefore keeps the worker role in the documented personal
+agent location and does not modify OpenAI Codex Core.
+
+Compatibility is determined by an actual staged Hook plus native child
+callback, not by the Codex version string alone. A historical Codex `0.149.0`
+run applied the child model while inheriting the OpenAI parent's provider and
+failed with a visible model/account compatibility error before Z.AI was
+contacted. In contrast, after the sandbox-safe handoff-state fix, the current
+bundled `codex-cli 0.148.0-alpha.21` completed the native callback exactly:
+
+```text
+ZAI_GLM53_NATIVE_OK
+arithmetic=323
+```
+
+An earlier repository release worked around that gap by installing the official
+`@openai/codex@0.148.0-alpha.9` package and selecting it with
+`CODEX_CLI_PATH`. The official
+[environment-variable reference](https://developers.openai.com/codex/environment-variables/)
+lists stable public variables and does not list `CODEX_CLI_PATH`; it is not a
+stable public environment variable. Native verification also showed that this
+older executable is protocol-incompatible with the current Codex Desktop
+code-mode host. The workaround is retired: `install` and `activate` now fail
+closed without downloading a runtime or setting a Desktop override.
+
+If the legacy override was activated by an earlier version, inspect and remove
+only that exact managed override with:
+
+```
+~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime status
+~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate
+```
+
+Deactivation refuses to unset an unrelated `CODEX_CLI_PATH`. Restart Codex
+Desktop after deactivation so it returns to the bundled app-server. If an
+actual child rollout reports provider `openai` and a model/account compatibility
+error, keep that runtime-specific failure visible: do not spawn again, do not
+select Luna, and do not replace the Desktop runtime. Retry only after a material
+runtime or configuration change and a newly authorized deterministic smoke.
+
 ## macOS Configure
 
 After install, the macOS helper is available at:
@@ -136,6 +184,16 @@ installer manages, and never placed in the repository or command arguments.
   `reasoning_effort=max`. It stages one complete assignment through stdin before
   calling the native spawn route; a failed stage must never be followed by a
   spawn.
+- Stage and Hook resolve the same per-user state root under the process
+  temporary directory, avoiding routine writes to `~/.codex` from a
+  workspace-only sandbox. The state directory is mode `0700`; assignment
+  envelopes and lock files are mode `0600`, and symlinked or foreign-owned
+  roots fail closed.
+- If staging nevertheless reports `Operation not permitted`, the parent may
+  request one sandbox approval for the same stdin assignment and retry once.
+  This approval covers staging only; spawn remains forbidden until staging
+  succeeds and it never authorizes a provider, model, credential, transport, or
+  fallback change.
 - Assignments are self-contained and include an explicit writable scope and
   validation commands. The child spawn message only identifies the trusted
   one-shot Hook; the Hook injects the actual assignment.
@@ -166,6 +224,13 @@ Behavior changes are written tests-first.
 
 ## Uninstall
 
+If the retired legacy override is active, deactivate it and restart Codex
+Desktop before running the normal uninstall:
+
+```
+~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate
+```
+
 Normal uninstall:
 
 ```
@@ -186,10 +251,17 @@ Documentation and tests distinguish three levels:
   credentials have been supplied.
 - `ready`: verified by an explicitly authorized real GLM child smoke.
 
-Current status is `locally_verified` only: this build has not been installed or
-configured in a real `~/.codex` (so it is **not** `configured`) and no
-explicitly authorized real GLM child smoke has been performed (so it is **not**
-`ready`). Do not report a live service as verified without an authorized smoke.
+Current status is `ready` on the verified local macOS installation. On
+2026-08-22, the bundled `codex-cli 0.148.0-alpha.21` returned this exact native
+child callback after the assignment was staged through the installed Hook:
+
+```text
+ZAI_GLM53_NATIVE_OK
+arithmetic=323
+```
+
+This result is environment-specific. Other Codex builds must repeat the native
+smoke before being reported as ready.
 
 ## Security
 

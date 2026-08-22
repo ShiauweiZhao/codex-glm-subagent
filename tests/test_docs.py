@@ -32,6 +32,7 @@ class DocsContractTests(unittest.TestCase):
         "Architecture / Data Flow",
         "Requirements",
         "Install",
+        "Codex Runtime Compatibility",
         "macOS Configure",
         "Linux Configure",
         "Use / Delegation",
@@ -90,12 +91,13 @@ class DocsContractTests(unittest.TestCase):
         self.assertNotRegex(readme, r"`keychain`\s+must be available")
         self.assertNotRegex(readme, r"through\s+`security`")
 
-    def test_readme_current_status_locally_verified_only(self):
+    def test_readme_current_status_records_native_ready_smoke(self):
         readme = read("README.md")
-        # Current status must be locally_verified only -- explicitly not configured/ready.
-        self.assertRegex(readme, r"Current status is `?locally_verified")
-        self.assertNotRegex(readme, r"Current status is `?configured")
-        self.assertNotRegex(readme, r"Current status is `?ready")
+        self.assertRegex(readme, r"Current status is `?ready")
+        self.assertIn("0.148.0-alpha.21", readme)
+        self.assertIn("ZAI_GLM53_NATIVE_OK", readme)
+        self.assertIn("arithmetic=323", readme)
+        self.assertNotRegex(readme, r"Current status is `?locally_verified only")
 
     def test_readme_no_localhost_bridge_or_fallback(self):
         readme = read("README.md")
@@ -110,12 +112,41 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("/hooks", readme)
         self.assertIn("^zai_glm53_worker$", readme)
 
+    def test_readme_documents_sandbox_safe_handoff_state(self):
+        readme = read("README.md")
+        normalized = " ".join(readme.lower().split())
+        self.assertIn("process temporary directory", normalized)
+        self.assertIn("mode `0700`", normalized)
+        self.assertIn("mode `0600`", normalized)
+        self.assertIn("sandbox approval", normalized)
+        self.assertIn("operation not permitted", normalized)
+
     def test_readme_installer_never_touches_config_or_auth(self):
         readme = read("README.md")
         self.assertIn("config.toml", readme)
         self.assertIn("auth.json", readme)
         self.assertIn("Login Keychain", readme)
         self.assertIn("ZAI_API_KEY", readme)
+
+    def test_readme_retires_unsafe_desktop_runtime_override(self):
+        readme = read("README.md")
+        normalized = " ".join(readme.split())
+        self.assertIn("0.148.0-alpha.9", readme)
+        self.assertIn("CODEX_CLI_PATH", readme)
+        self.assertIn("codex-glm53-runtime deactivate", readme)
+        self.assertNotIn("codex-glm53-runtime install --activate", readme)
+        self.assertIn("not a stable public environment variable", normalized)
+        self.assertIn("protocol-incompatible", normalized)
+        self.assertIn("restart", readme.lower())
+        self.assertIn(
+            "https://developers.openai.com/codex/multi-agent/", readme
+        )
+        self.assertIn(
+            "https://developers.openai.com/codex/config-reference/", readme
+        )
+        self.assertIn(
+            "https://developers.openai.com/codex/environment-variables/", readme
+        )
 
     def test_architecture_decision(self):
         doc = read("docs/architecture-decision.md")

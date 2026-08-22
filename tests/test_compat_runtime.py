@@ -1,6 +1,8 @@
+import io
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from codex_glm53_subagent import compat_runtime
@@ -99,6 +101,18 @@ class CompatRuntimeInstallTest(unittest.TestCase):
             )
 
         self.assertEqual(runner.calls, [])
+
+    def test_cli_install_fails_cleanly_without_traceback(self):
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr):
+            result = compat_runtime.main(
+                ["install", "--codex-home", str(self.codex_home)]
+            )
+
+        self.assertEqual(result, 1)
+        self.assertIn("installation is disabled", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
 
 class CompatRuntimeActivationTest(unittest.TestCase):

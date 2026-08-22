@@ -207,16 +207,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     if args.activate and args.action != "install":
         parser.error("--activate is only valid with install")
-    if args.action == "install":
-        report = install(args.codex_home)
-        if args.activate:
-            report["activation"] = activate(args.codex_home)
-    elif args.action == "activate":
-        report = activate(args.codex_home)
-    elif args.action == "deactivate":
-        report = deactivate(args.codex_home)
-    else:
-        report = status(args.codex_home)
+    try:
+        if args.action == "install":
+            report = install(args.codex_home)
+            if args.activate:
+                report["activation"] = activate(args.codex_home)
+        elif args.action == "activate":
+            report = activate(args.codex_home)
+        elif args.action == "deactivate":
+            report = deactivate(args.codex_home)
+        else:
+            report = status(args.codex_home)
+    except RuntimeError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

@@ -32,6 +32,7 @@ class DocsContractTests(unittest.TestCase):
         "Architecture / Data Flow",
         "Requirements",
         "Install",
+        "Codex 0.149 Compatibility",
         "macOS Configure",
         "Linux Configure",
         "Use / Delegation",
@@ -116,6 +117,15 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("auth.json", readme)
         self.assertIn("Login Keychain", readme)
         self.assertIn("ZAI_API_KEY", readme)
+
+    def test_readme_documents_explicit_reversible_0149_compatibility_mode(self):
+        readme = read("README.md")
+        self.assertIn("0.148.0-alpha.9", readme)
+        self.assertIn("CODEX_CLI_PATH", readme)
+        self.assertIn("codex-glm53-runtime install --activate", readme)
+        self.assertIn("codex-glm53-runtime deactivate", readme)
+        self.assertIn("restart", readme.lower())
+        self.assertIn("does not patch", readme.lower())
 
     def test_architecture_decision(self):
         doc = read("docs/architecture-decision.md")

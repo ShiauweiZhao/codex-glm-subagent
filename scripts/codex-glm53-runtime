@@ -1,0 +1,4 @@
+#!/bin/sh
+CODEX_GLM53_RUNTIME_ROOT=__CODEX_GLM53_RUNTIME_ROOT__
+export PYTHONPATH="${CODEX_GLM53_RUNTIME_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
+exec __PYTHON_EXECUTABLE__ -m codex_glm53_subagent.compat_runtime "$@"

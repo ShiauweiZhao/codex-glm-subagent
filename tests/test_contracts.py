@@ -197,6 +197,14 @@ class Glm53ContractsTest(unittest.TestCase):
         ):
             self.assertIn(marker, normalized)
 
+    def test_skill_routes_codex_0149_provider_regression_to_compatibility_mode(self):
+        body = read("skills", "use-zai-glm53-worker", "SKILL.md")
+        normalized = " ".join(body.lower().split())
+        self.assertIn("codex 0.149", normalized)
+        self.assertIn("codex-glm53-runtime", body)
+        self.assertIn("restart codex desktop", normalized)
+        self.assertIn("must not select luna", normalized)
+
     def test_agent_yaml_schema(self):
         raw = read("skills", "use-zai-glm53-worker", "agents", "openai.yaml")
         data = parse_simple_yaml(raw)

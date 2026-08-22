@@ -56,6 +56,25 @@ Every assignment must include:
    gets a new staged handoff and a new child; do not rely on cross-provider
    follow-up delivery.
 
+## Codex 0.149 provider regression
+
+If the child rollout reports provider `openai` and the ChatGPT backend rejects
+`glm-5.3` as unsupported for the account, the running Codex 0.149 app-server
+has inherited the parent provider instead of applying the registered role's
+provider. This is a model/account compatibility failure, not GLM capacity, and
+must not select Luna or trigger a spawn retry.
+
+Report the boundary and direct the user to the installed compatibility helper:
+
+```text
+~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime install --activate
+```
+
+The user must restart Codex Desktop after activation and start a new task before
+the parent stages a fresh assignment. The helper selects the unmodified pinned
+Codex executable as Desktop's primary app-server; it is not a bridge, direct API
+call, or second orchestrated CLI.
+
 ## Standing authorization
 
 - Context and tool results cross the Z.AI boundary and require authorization.

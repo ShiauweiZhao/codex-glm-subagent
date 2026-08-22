@@ -63,6 +63,12 @@ WRAPPER = (
     'export PYTHONPATH="${CODEX_GLM53_RUNTIME_ROOT}${PYTHONPATH:+:$PYTHONPATH}"\n'
     'exec __PYTHON_EXECUTABLE__ -m codex_glm53_subagent.credentials "$@"\n'
 )
+RUNTIME_WRAPPER = (
+    "#!/bin/sh\n"
+    "CODEX_GLM53_RUNTIME_ROOT=__CODEX_GLM53_RUNTIME_ROOT__\n"
+    'export PYTHONPATH="${CODEX_GLM53_RUNTIME_ROOT}${PYTHONPATH:+:$PYTHONPATH}"\n'
+    'exec __PYTHON_EXECUTABLE__ -m codex_glm53_subagent.compat_runtime "$@"\n'
+)
 SNIPPET = (
     "<!-- codex-glm-subagent:start -->\n"
     "Managed GLM-5.3 standalone worker block.\n"
@@ -96,6 +102,9 @@ def make_repo(root: Path) -> Path:
     wrapper = scripts / "codex-zai-glm53-credentials"
     wrapper.write_text(WRAPPER, encoding="utf-8")
     os.chmod(wrapper, 0o700)
+    runtime_wrapper = scripts / "codex-glm53-runtime"
+    runtime_wrapper.write_text(RUNTIME_WRAPPER, encoding="utf-8")
+    os.chmod(runtime_wrapper, 0o700)
 
     snippets = root / "snippets"
     snippets.mkdir()
@@ -156,16 +165,28 @@ class RenderTest(InstallerTestBase):
         self.assertTrue(
             (self.codex / "skills" / "use-zai-glm53-worker" / "agents" / "openai.yaml").is_file()
         )
+        self.assertTrue(
+            (
+                self.codex
+                / "zai-glm53-subagent"
+                / "bin"
+                / "codex-glm53-runtime"
+            ).is_file()
+        )
 
     def test_wrapper_renders_abs_python_and_runtime(self):
         self.install("darwin")
-        wrapper = (self.codex / "zai-glm53-subagent" / "bin" / "codex-zai-glm53-credentials")
-        text = wrapper.read_text(encoding="utf-8")
-        self.assertIn(sys.executable, text)
-        self.assertIn(str(self.codex / "zai-glm53-subagent" / "runtime"), text)
-        self.assertIn("-m codex_glm53_subagent.credentials", text)
-        self.assertNotIn("__PYTHON_EXECUTABLE__", text)
-        self.assertNotIn("__CODEX_GLM53_RUNTIME_ROOT__", text)
+        for name, module in (
+            ("codex-zai-glm53-credentials", "credentials"),
+            ("codex-glm53-runtime", "compat_runtime"),
+        ):
+            wrapper = self.codex / "zai-glm53-subagent" / "bin" / name
+            text = wrapper.read_text(encoding="utf-8")
+            self.assertIn(sys.executable, text)
+            self.assertIn(str(self.codex / "zai-glm53-subagent" / "runtime"), text)
+            self.assertIn(f"-m codex_glm53_subagent.{module}", text)
+            self.assertNotIn("__PYTHON_EXECUTABLE__", text)
+            self.assertNotIn("__CODEX_GLM53_RUNTIME_ROOT__", text)
 
     def test_wrapper_quotes_shell_paths_and_preserves_pythonpath(self):
         self.codex = self.tmp / 'codex "double" \'single\' $dollar (paren) $(touch${IFS}PWNED)'
@@ -300,6 +321,8 @@ class InstallBehaviorTest(InstallerTestBase):
         self.install("darwin")
         helper = self.codex / "zai-glm53-subagent" / "bin" / "codex-zai-glm53-credentials"
         self.assertEqual(stat.S_IMODE(os.stat(helper).st_mode), 0o700)
+        runtime_helper = self.codex / "zai-glm53-subagent" / "bin" / "codex-glm53-runtime"
+        self.assertEqual(stat.S_IMODE(os.stat(runtime_helper).st_mode), 0o700)
         agent = self.codex / "agents" / "zai-glm53-worker.toml"
         self.assertEqual(stat.S_IMODE(os.stat(agent).st_mode), 0o600)
         manifest = self.codex / "zai-glm53-subagent" / "install-manifest.json"
@@ -363,6 +386,21 @@ class AgentsBlockTest(InstallerTestBase):
         )
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
         self.assertNotIn("RuntimeWarning", help_result.stderr)
+
+        runtime_helper = (
+            codex_home
+            / "zai-glm53-subagent"
+            / "bin"
+            / "codex-glm53-runtime"
+        )
+        runtime_help = subprocess.run(
+            [str(runtime_helper), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(runtime_help.returncode, 0, runtime_help.stderr)
+        self.assertIn("compatible with cross-provider child roles", runtime_help.stdout)
 
         installer.uninstall(codex_home, platform="darwin")
         after = agents.read_text(encoding="utf-8")

@@ -7,7 +7,9 @@ import json
 import os
 import pathlib
 import re
+import stat
 import sys
+import tempfile
 from typing import Optional, Tuple
 import uuid
 
@@ -24,23 +26,18 @@ class EnvelopeError(ValueError):
     pass
 
 
-def script_local_state_root(
-    script_path: Optional[pathlib.Path] = None,
-) -> pathlib.Path:
-    script = pathlib.Path(__file__) if script_path is None else pathlib.Path(script_path)
-    resolved = script.expanduser().resolve()
-    hooks_directory = next(
-        (parent for parent in resolved.parents if parent.name == "hooks"),
-        None,
+def default_state_root() -> pathlib.Path:
+    user_id = os.getuid() if hasattr(os, "getuid") else "user"
+    return (
+        pathlib.Path(tempfile.gettempdir()).resolve()
+        / f"codex-zai-glm53-subagent-{user_id}-handoff-state"
     )
-    install_root = hooks_directory.parent if hooks_directory else resolved.parent
-    return install_root / "zai-glm53-subagent" / "handoff-state"
 
 
 def state_root(value: Optional[str]) -> pathlib.Path:
     if value:
-        return pathlib.Path(value).expanduser().resolve()
-    return script_local_state_root()
+        return pathlib.Path(os.path.abspath(pathlib.Path(value).expanduser()))
+    return default_state_root()
 
 
 def fail(message: str, code: int) -> None:
@@ -62,6 +59,11 @@ def state_lock(root: pathlib.Path):
     descriptor = None
     try:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        metadata = root.lstat()
+        if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+            fail("Refusing an unsafe plaintext handoff state directory.", 12)
+        if hasattr(os, "geteuid") and metadata.st_uid != os.geteuid():
+            fail("Refusing a plaintext handoff state directory owned by another user.", 12)
         root.chmod(0o700)
         descriptor = os.open(
             root / f".{AGENT_TYPE}.lock", os.O_RDWR | os.O_CREAT, 0o600

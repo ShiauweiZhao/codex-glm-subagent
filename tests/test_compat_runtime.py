@@ -92,7 +92,7 @@ class CompatRuntimeInstallTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             RuntimeError,
-            "no released Codex runtime verified by this repository supports",
+            "installing a replacement Codex Desktop app-server is disabled",
         ):
             compat_runtime.install(
                 self.codex_home,
@@ -111,7 +111,10 @@ class CompatRuntimeInstallTest(unittest.TestCase):
             )
 
         self.assertEqual(result, 1)
-        self.assertIn("installation is disabled", stderr.getvalue())
+        self.assertIn(
+            "installing a replacement Codex Desktop app-server is disabled",
+            stderr.getvalue(),
+        )
         self.assertNotIn("Traceback", stderr.getvalue())
 
 

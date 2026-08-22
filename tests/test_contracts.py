@@ -197,15 +197,30 @@ class Glm53ContractsTest(unittest.TestCase):
         ):
             self.assertIn(marker, normalized)
 
-    def test_skill_fails_closed_on_released_codex_provider_regression(self):
+    def test_skill_fails_closed_on_runtime_specific_provider_error(self):
         body = read("skills", "use-zai-glm53-worker", "SKILL.md")
         normalized = " ".join(body.lower().split())
-        self.assertIn("released codex provider limitation", normalized)
+        self.assertIn("runtime-specific provider failure", normalized)
+        self.assertIn("do not block staging from a version string alone", normalized)
         self.assertIn("codex-glm53-runtime", body)
         self.assertIn("restart codex desktop", normalized)
         self.assertIn("must not spawn", normalized)
         self.assertIn("must not select luna", normalized)
+        self.assertNotIn(
+            "do not stage a fresh assignment until a released bundled codex runtime",
+            normalized,
+        )
         self.assertNotIn("codex-glm53-runtime install --activate", body)
+
+    def test_skill_recovers_sandbox_denied_staging_without_changing_transport(self):
+        body = read("skills", "use-zai-glm53-worker", "SKILL.md")
+        normalized = " ".join(body.lower().split())
+        self.assertIn("operation not permitted", normalized)
+        self.assertIn("exactly one sandbox approval", normalized)
+        self.assertIn("retry the same staging command once", normalized)
+        self.assertIn("must not spawn until that retry succeeds", normalized)
+        self.assertIn("does not authorize a provider", normalized)
+        self.assertIn("assignment itself is stdin", normalized)
 
     def test_agent_yaml_schema(self):
         raw = read("skills", "use-zai-glm53-worker", "agents", "openai.yaml")

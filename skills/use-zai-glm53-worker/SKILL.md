@@ -42,10 +42,17 @@ Every assignment must include:
    The required script action is `plaintext_handoff.py --mode stage`; the
    assignment itself is stdin, never a command argument.
 
-   If `CODEX_HOME` is unset, use `~/.codex`. The plaintext assignment briefly
-   exists in the local user state and then crosses the Z.AI data boundary. Do
-   not put it or credentials in command arguments. If the parent sandbox needs
-   approval to write that state, the parent owns that approval decision.
+   If `CODEX_HOME` is unset, use `~/.codex`. The script and Hook derive the same
+   per-user handoff directory from the process temporary directory. The
+   plaintext assignment briefly exists there and then crosses the Z.AI data
+   boundary. Do not put it or credentials in command arguments.
+
+   If staging still fails with `Operation not permitted`, never spawn from that
+   failure. The parent may request exactly one sandbox approval for the same
+   complete assignment, retry the same staging command once, and keep the
+   assignment itself as stdin. It must not spawn until that retry succeeds. A
+   staging approval does not authorize a provider, model, credential, transport,
+   or fallback change. If the retry fails, stop and report the exact error.
    Never spawn after a failed stage.
 3. Immediately spawn exact agent type `zai_glm53_worker` with a unique task name,
    `fork_turns="none"`, and `reasoning_effort="max"`. The spawn message should
@@ -56,7 +63,10 @@ Every assignment must include:
    gets a new staged handoff and a new child; do not rely on cross-provider
    follow-up delivery.
 
-## Released Codex provider limitation
+## Runtime-specific provider failure
+
+Do not block staging from a version string alone. The actual native child
+callback or rollout error is the compatibility oracle.
 
 If the child rollout reports provider `openai` and the ChatGPT backend rejects
 `glm-5.3` as unsupported for the account, the running Codex app-server has
@@ -72,10 +82,10 @@ retired managed override, direct the user to remove it:
 ~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate
 ```
 
-The user must restart Codex Desktop after deactivation. Do not stage a fresh
-assignment until a released bundled Codex runtime supports the role-level
-provider configuration. This limitation is not a bridge, authentication, or
-capacity problem.
+The user must restart Codex Desktop after deactivation. Retry only after a
+material runtime or configuration change and a new explicitly authorized
+deterministic smoke; never restore the retired Desktop override. This failure is
+not a bridge, authentication, or capacity problem.
 
 ## Standing authorization
 

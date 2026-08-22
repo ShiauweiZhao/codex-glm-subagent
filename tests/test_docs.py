@@ -32,7 +32,7 @@ class DocsContractTests(unittest.TestCase):
         "Architecture / Data Flow",
         "Requirements",
         "Install",
-        "Released Codex Provider Limitation",
+        "Codex Runtime Compatibility",
         "macOS Configure",
         "Linux Configure",
         "Use / Delegation",
@@ -91,12 +91,13 @@ class DocsContractTests(unittest.TestCase):
         self.assertNotRegex(readme, r"`keychain`\s+must be available")
         self.assertNotRegex(readme, r"through\s+`security`")
 
-    def test_readme_current_status_locally_verified_only(self):
+    def test_readme_current_status_records_native_ready_smoke(self):
         readme = read("README.md")
-        # Current status must be locally_verified only -- explicitly not configured/ready.
-        self.assertRegex(readme, r"Current status is `?locally_verified")
-        self.assertNotRegex(readme, r"Current status is `?configured")
-        self.assertNotRegex(readme, r"Current status is `?ready")
+        self.assertRegex(readme, r"Current status is `?ready")
+        self.assertIn("0.148.0-alpha.21", readme)
+        self.assertIn("ZAI_GLM53_NATIVE_OK", readme)
+        self.assertIn("arithmetic=323", readme)
+        self.assertNotRegex(readme, r"Current status is `?locally_verified only")
 
     def test_readme_no_localhost_bridge_or_fallback(self):
         readme = read("README.md")
@@ -110,6 +111,15 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("Hook is required independently of bridge", readme)
         self.assertIn("/hooks", readme)
         self.assertIn("^zai_glm53_worker$", readme)
+
+    def test_readme_documents_sandbox_safe_handoff_state(self):
+        readme = read("README.md")
+        normalized = " ".join(readme.lower().split())
+        self.assertIn("process temporary directory", normalized)
+        self.assertIn("mode `0700`", normalized)
+        self.assertIn("mode `0600`", normalized)
+        self.assertIn("sandbox approval", normalized)
+        self.assertIn("operation not permitted", normalized)
 
     def test_readme_installer_never_touches_config_or_auth(self):
         readme = read("README.md")

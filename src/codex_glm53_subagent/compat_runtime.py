@@ -83,9 +83,8 @@ def install(
 
     del codex_home, runner, which
     raise RuntimeError(
-        "no released Codex runtime verified by this repository supports "
-        "cross-provider child roles without replacing the Codex Desktop "
-        "app-server; installation is disabled"
+        "installing a replacement Codex Desktop app-server is disabled; "
+        "use the bundled runtime and validate the native child path"
     )
 
 

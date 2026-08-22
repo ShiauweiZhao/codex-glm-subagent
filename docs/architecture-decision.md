@@ -18,15 +18,17 @@ plaintext `SubagentStart` Hook before native spawn. There is no bridge, no Chat
 conversion, no SQLite service state, no daemon, no MCP server, no second Codex
 CLI, and no runtime provider or model fallback.
 
-Current released Codex app-server implementations verified by this repository
-do not apply a custom child role's provider independently from its parent. The
-failure remains visible until a released bundled runtime honors the user-level
-agent configuration. The retired Codex 0.148.0-alpha.9 `CODEX_CLI_PATH`
-workaround is protocol-incompatible with the current Desktop and must not be
-installed or activated. The recovery helper retains only status and exact
-deactivation behavior for users who activated that legacy override. OpenAI
-Codex Core, the parent provider/login, and the direct Z.AI data plane remain
-unchanged.
+Runtime compatibility is gated by an actual staged Hook and native child
+callback, not a version string. A historical Codex 0.149.0 run inherited the
+OpenAI parent provider and failed before contacting Z.AI. After the sandbox-safe
+handoff-state fix, the bundled codex-cli 0.148.0-alpha.21 returned the exact
+native callback `ZAI_GLM53_NATIVE_OK` and `arithmetic=323`. A real provider/model
+error remains visible and is not treated as capacity. The retired Codex
+0.148.0-alpha.9 `CODEX_CLI_PATH` workaround is protocol-incompatible with the
+current Desktop and must not be installed or activated. The recovery helper
+retains only status and exact deactivation behavior for users who activated
+that legacy override. OpenAI Codex Core, the parent provider/login, and the
+direct Z.AI data plane remain unchanged.
 
 Eligible bounded implementation defaults to GLM. Only an explicit GLM
 quota/token/rate-limit exhaustion signal allows parent orchestration to reissue
@@ -85,6 +87,11 @@ https://open.bigmodel.cn/api/v1
 - **At-most-once assignment**: stage uses one expiring pending slot; the matching
   `SubagentStart` event atomically claims and consumes it. Missing, stale,
   malformed, replayed, or mismatched handoffs fail visibly.
+- **Sandbox-safe local state**: stage and Hook derive one per-user state root
+  from the process temporary directory. The root is mode `0700`; lock and
+  assignment files are mode `0600`. Unsafe symlinked or foreign-owned state
+  roots fail closed. A sandbox-denied stage may be retried once only after an
+  exact staging approval; it does not authorize spawn or any provider change.
 - **No inherited-turn workaround**: `fork_turns=none` avoids widening the Z.AI
   data boundary and identity confusion. A new assignment gets a new handoff and
   child instead of relying on cross-provider follow-up delivery.

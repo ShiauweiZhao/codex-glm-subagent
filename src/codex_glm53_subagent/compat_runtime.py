@@ -1,10 +1,9 @@
-"""Install and select a known-compatible, unmodified Codex runtime.
+"""Inspect and deactivate the retired Codex Desktop runtime override.
 
-Codex 0.149.0 stopped allowing a registered child role to select a provider
-different from its parent.  The last runtime verified with this repository's
-native cross-provider child contract is installed side-by-side and selected by
-Codex Desktop's ``CODEX_CLI_PATH`` environment override.  This module never
-edits Codex config or authentication files and never patches the Codex binary.
+An earlier release installed Codex 0.148.0-alpha.9 side-by-side and selected it
+through ``CODEX_CLI_PATH``.  That executable is protocol-incompatible with the
+current Desktop app-server host.  Installation and activation now fail closed;
+status and deactivation remain available for exact legacy recovery only.
 """
 
 from __future__ import annotations
@@ -15,13 +14,11 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
 
 COMPAT_CODEX_VERSION = "0.148.0-alpha.9"
-COMPAT_PACKAGE = f"@openai/codex@{COMPAT_CODEX_VERSION}"
 CODEX_CLI_ENV = "CODEX_CLI_PATH"
 
 Runner = Callable[..., subprocess.CompletedProcess]
@@ -82,68 +79,14 @@ def install(
     runner: Runner = subprocess.run,
     which: Which = shutil.which,
 ) -> dict:
-    """Install the pinned official npm package without running package scripts."""
+    """Refuse the retired Desktop-wide runtime workaround."""
 
-    target = runtime_root(codex_home)
-    if target.exists() or target.is_symlink():
-        try:
-            binary = installed_binary(codex_home, runner=runner)
-        except (OSError, RuntimeError) as error:
-            raise RuntimeError(
-                "refusing to overwrite an unverified compatible runtime"
-            ) from error
-        return {
-            "status": "already_installed",
-            "version": COMPAT_CODEX_VERSION,
-            "codex_cli_path": str(binary),
-        }
-
-    npm = which("npm")
-    if not npm:
-        raise RuntimeError("npm is required to install the compatible Codex runtime")
-
-    parent = target.parent
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".codex-runtime-staging-", dir=parent))
-    npm_cache = staging / ".npm-cache"
-    try:
-        completed = runner(
-            [
-                npm,
-                "install",
-                "--prefix",
-                str(staging),
-                "--cache",
-                str(npm_cache),
-                "--ignore-scripts",
-                "--no-audit",
-                "--no-fund",
-                "--package-lock=false",
-                COMPAT_PACKAGE,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode != 0:
-            raise RuntimeError("npm failed to install the compatible Codex runtime")
-        staged_binary = _find_binary(staging)
-        _verify_binary(staged_binary, runner)
-        if npm_cache.exists():
-            shutil.rmtree(npm_cache)
-        os.replace(staging, target)
-    except OSError as error:
-        raise RuntimeError("could not install the compatible Codex runtime") from error
-    finally:
-        if staging.exists() or staging.is_symlink():
-            shutil.rmtree(staging)
-
-    binary = installed_binary(codex_home, runner=runner)
-    return {
-        "status": "installed",
-        "version": COMPAT_CODEX_VERSION,
-        "codex_cli_path": str(binary),
-    }
+    del codex_home, runner, which
+    raise RuntimeError(
+        "no released Codex runtime verified by this repository supports "
+        "cross-provider child roles without replacing the Codex Desktop "
+        "app-server; installation is disabled"
+    )
 
 
 def _launchctl(which: Which) -> str:
@@ -184,25 +127,10 @@ def activate(
         raise RuntimeError(
             f"{CODEX_CLI_ENV} is already set to another executable; refusing to replace it"
         )
-    if current == str(binary):
-        return {
-            "status": "already_active",
-            "codex_cli_path": str(binary),
-            "restart_required": True,
-        }
-    completed = runner(
-        [launchctl, "setenv", CODEX_CLI_ENV, str(binary)],
-        capture_output=True,
-        text=True,
-        check=False,
+    raise RuntimeError(
+        "refusing to replace Codex Desktop app-server: the legacy runtime is "
+        "protocol-incompatible with the current Desktop; use the bundled runtime"
     )
-    if completed.returncode != 0:
-        raise RuntimeError("could not activate the compatible Codex Desktop runtime")
-    return {
-        "status": "activated",
-        "codex_cli_path": str(binary),
-        "restart_required": True,
-    }
 
 
 def deactivate(
@@ -244,7 +172,13 @@ def status(
     try:
         binary = installed_binary(codex_home, runner=runner)
     except (OSError, RuntimeError):
-        return {"installed": False, "version": COMPAT_CODEX_VERSION, "active": False}
+        return {
+            "installed": False,
+            "version": COMPAT_CODEX_VERSION,
+            "active": False,
+            "activation_supported": False,
+            "reason": "the retired runtime is protocol-incompatible with current Codex Desktop",
+        }
     active = False
     if platform == "darwin":
         launchctl = _launchctl(which)
@@ -254,19 +188,21 @@ def status(
         "version": COMPAT_CODEX_VERSION,
         "codex_cli_path": str(binary),
         "active": active,
+        "activation_supported": False,
+        "reason": "the retired runtime is protocol-incompatible with current Codex Desktop",
     }
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Manage the Codex runtime compatible with cross-provider child roles"
+        description="Inspect or deactivate the retired legacy Codex Desktop runtime override"
     )
     parser.add_argument("action", choices=("install", "activate", "deactivate", "status"))
     parser.add_argument("--codex-home", type=Path, default=Path.home() / ".codex")
     parser.add_argument(
         "--activate",
         action="store_true",
-        help="activate the runtime immediately after install (macOS; restart required)",
+        help="retired option; installation and activation now fail closed",
     )
     args = parser.parse_args(argv)
     if args.activate and args.action != "install":

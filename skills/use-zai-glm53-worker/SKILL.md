@@ -56,24 +56,26 @@ Every assignment must include:
    gets a new staged handoff and a new child; do not rely on cross-provider
    follow-up delivery.
 
-## Codex 0.149 provider regression
+## Released Codex provider limitation
 
 If the child rollout reports provider `openai` and the ChatGPT backend rejects
-`glm-5.3` as unsupported for the account, the running Codex 0.149 app-server
-has inherited the parent provider instead of applying the registered role's
-provider. This is a model/account compatibility failure, not GLM capacity, and
-must not select Luna or trigger a spawn retry.
+`glm-5.3` as unsupported for the account, the running Codex app-server has
+inherited the parent provider instead of applying the registered role's
+provider. This is a model/account compatibility failure, not GLM capacity.
+It must not spawn again, select Luna, or trigger a recovery probe.
 
-Report the boundary and direct the user to the installed compatibility helper:
+Report the released-runtime support boundary. Do not install or activate a
+different Desktop app-server. If an earlier repository version activated the
+retired managed override, direct the user to remove it:
 
 ```text
-~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime install --activate
+~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate
 ```
 
-The user must restart Codex Desktop after activation and start a new task before
-the parent stages a fresh assignment. The helper selects the unmodified pinned
-Codex executable as Desktop's primary app-server; it is not a bridge, direct API
-call, or second orchestrated CLI.
+The user must restart Codex Desktop after deactivation. Do not stage a fresh
+assignment until a released bundled Codex runtime supports the role-level
+provider configuration. This limitation is not a bridge, authentication, or
+capacity problem.
 
 ## Standing authorization
 

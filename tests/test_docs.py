@@ -32,7 +32,7 @@ class DocsContractTests(unittest.TestCase):
         "Architecture / Data Flow",
         "Requirements",
         "Install",
-        "Codex 0.149 Compatibility",
+        "Released Codex Provider Limitation",
         "macOS Configure",
         "Linux Configure",
         "Use / Delegation",
@@ -118,14 +118,25 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("Login Keychain", readme)
         self.assertIn("ZAI_API_KEY", readme)
 
-    def test_readme_documents_explicit_reversible_0149_compatibility_mode(self):
+    def test_readme_retires_unsafe_desktop_runtime_override(self):
         readme = read("README.md")
+        normalized = " ".join(readme.split())
         self.assertIn("0.148.0-alpha.9", readme)
         self.assertIn("CODEX_CLI_PATH", readme)
-        self.assertIn("codex-glm53-runtime install --activate", readme)
         self.assertIn("codex-glm53-runtime deactivate", readme)
+        self.assertNotIn("codex-glm53-runtime install --activate", readme)
+        self.assertIn("not a stable public environment variable", normalized)
+        self.assertIn("protocol-incompatible", normalized)
         self.assertIn("restart", readme.lower())
-        self.assertIn("does not patch", readme.lower())
+        self.assertIn(
+            "https://developers.openai.com/codex/multi-agent/", readme
+        )
+        self.assertIn(
+            "https://developers.openai.com/codex/config-reference/", readme
+        )
+        self.assertIn(
+            "https://developers.openai.com/codex/environment-variables/", readme
+        )
 
     def test_architecture_decision(self):
         doc = read("docs/architecture-decision.md")

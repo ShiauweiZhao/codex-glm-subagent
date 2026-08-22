@@ -400,7 +400,7 @@ class AgentsBlockTest(InstallerTestBase):
             check=False,
         )
         self.assertEqual(runtime_help.returncode, 0, runtime_help.stderr)
-        self.assertIn("compatible with cross-provider child roles", runtime_help.stdout)
+        self.assertIn("retired legacy Codex Desktop runtime override", runtime_help.stdout)
 
         installer.uninstall(codex_home, platform="darwin")
         after = agents.read_text(encoding="utf-8")

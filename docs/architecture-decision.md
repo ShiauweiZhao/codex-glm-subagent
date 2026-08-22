@@ -18,14 +18,15 @@ plaintext `SubagentStart` Hook before native spawn. There is no bridge, no Chat
 conversion, no SQLite service state, no daemon, no MCP server, no second Codex
 CLI, and no runtime provider or model fallback.
 
-Codex Desktop 0.149.0 no longer permits a child role to select a provider
-different from its parent. For that runtime, the repository offers an explicit
-compatibility mode that installs the unmodified official Codex
-0.148.0-alpha.9 package side-by-side and selects it through Desktop's native
-`CODEX_CLI_PATH` environment override. After restart it is the app's primary
-local app-server, not a second orchestrated CLI. This does not patch OpenAI
-Codex Core, change the parent provider/login, or alter the direct Z.AI data
-plane, and the override can be deactivated.
+Current released Codex app-server implementations verified by this repository
+do not apply a custom child role's provider independently from its parent. The
+failure remains visible until a released bundled runtime honors the user-level
+agent configuration. The retired Codex 0.148.0-alpha.9 `CODEX_CLI_PATH`
+workaround is protocol-incompatible with the current Desktop and must not be
+installed or activated. The recovery helper retains only status and exact
+deactivation behavior for users who activated that legacy override. OpenAI
+Codex Core, the parent provider/login, and the direct Z.AI data plane remain
+unchanged.
 
 Eligible bounded implementation defaults to GLM. Only an explicit GLM
 quota/token/rate-limit exhaustion signal allows parent orchestration to reissue

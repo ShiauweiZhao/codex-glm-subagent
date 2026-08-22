@@ -197,13 +197,15 @@ class Glm53ContractsTest(unittest.TestCase):
         ):
             self.assertIn(marker, normalized)
 
-    def test_skill_routes_codex_0149_provider_regression_to_compatibility_mode(self):
+    def test_skill_fails_closed_on_released_codex_provider_regression(self):
         body = read("skills", "use-zai-glm53-worker", "SKILL.md")
         normalized = " ".join(body.lower().split())
-        self.assertIn("codex 0.149", normalized)
+        self.assertIn("released codex provider limitation", normalized)
         self.assertIn("codex-glm53-runtime", body)
         self.assertIn("restart codex desktop", normalized)
+        self.assertIn("must not spawn", normalized)
         self.assertIn("must not select luna", normalized)
+        self.assertNotIn("codex-glm53-runtime install --activate", body)
 
     def test_agent_yaml_schema(self):
         raw = read("skills", "use-zai-glm53-worker", "agents", "openai.yaml")

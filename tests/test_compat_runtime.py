@@ -36,6 +36,23 @@ class FakeNpmRunner:
         )
 
 
+def seed_legacy_runtime(codex_home):
+    binary = (
+        compat_runtime.runtime_root(codex_home)
+        / "node_modules"
+        / "@openai"
+        / "codex-darwin-arm64"
+        / "vendor"
+        / "aarch64-apple-darwin"
+        / "bin"
+        / "codex"
+    )
+    binary.parent.mkdir(parents=True)
+    binary.write_text("legacy compatible codex", encoding="utf-8")
+    binary.chmod(0o700)
+    return binary.resolve()
+
+
 class FakeLaunchctlRunner:
     def __init__(self, current=""):
         self.current = current
@@ -68,115 +85,47 @@ class CompatRuntimeInstallTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_installs_pinned_official_runtime_without_package_scripts(self):
+    def test_install_refuses_unsupported_desktop_override_before_npm(self):
         runner = FakeNpmRunner()
 
-        report = compat_runtime.install(
-            self.codex_home,
-            runner=runner,
-            which=lambda command: "/test/bin/npm" if command == "npm" else None,
-        )
-
-        binary = Path(report["codex_cli_path"])
-        self.assertTrue(binary.is_file())
-        self.assertEqual(report["version"], compat_runtime.COMPAT_CODEX_VERSION)
-        npm_args = runner.calls[0][0]
-        self.assertEqual(npm_args[0], "/test/bin/npm")
-        self.assertIn("--ignore-scripts", npm_args)
-        self.assertIn("--no-audit", npm_args)
-        self.assertIn("--no-fund", npm_args)
-        self.assertIn("--package-lock=false", npm_args)
-        self.assertIn("--cache", npm_args)
-        cache_path = Path(npm_args[npm_args.index("--cache") + 1])
-        prefix_path = Path(npm_args[npm_args.index("--prefix") + 1])
-        self.assertTrue(cache_path.is_relative_to(prefix_path))
-        self.assertIn(
-            f"@openai/codex@{compat_runtime.COMPAT_CODEX_VERSION}", npm_args
-        )
-        self.assertNotIn("config.toml", " ".join(npm_args))
-        self.assertNotIn("auth.json", " ".join(npm_args))
-
-    def test_existing_verified_runtime_is_idempotent(self):
-        runner = FakeNpmRunner()
-        first = compat_runtime.install(
-            self.codex_home,
-            runner=runner,
-            which=lambda _command: "/test/bin/npm",
-        )
-        second = compat_runtime.install(
-            self.codex_home,
-            runner=runner,
-            which=lambda _command: "/test/bin/npm",
-        )
-
-        self.assertEqual(first["status"], "installed")
-        self.assertEqual(second["status"], "already_installed")
-        self.assertEqual(sum(call[0][0] == "/test/bin/npm" for call in runner.calls), 1)
-
-    def test_rejects_unverified_existing_runtime_without_overwrite(self):
-        target = compat_runtime.runtime_root(self.codex_home)
-        target.mkdir(parents=True)
-        marker = target / "keep-me"
-        marker.write_text("unmanaged", encoding="utf-8")
-
-        with self.assertRaisesRegex(RuntimeError, "unverified compatible runtime"):
-            compat_runtime.install(
-                self.codex_home,
-                runner=FakeNpmRunner(),
-                which=lambda _command: "/test/bin/npm",
-            )
-
-        self.assertEqual(marker.read_text(encoding="utf-8"), "unmanaged")
-
-    @unittest.skipUnless(hasattr(Path, "symlink_to"), "symlinks are unavailable")
-    def test_rejects_intermediate_symlink_escape_before_download(self):
-        self.codex_home.mkdir()
-        outside = Path(self.tmp.name) / "outside"
-        outside.mkdir()
-        (self.codex_home / "zai-glm53-subagent").symlink_to(
-            outside, target_is_directory=True
-        )
-        runner = FakeNpmRunner()
-
-        with self.assertRaisesRegex(RuntimeError, "escapes Codex home"):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "no released Codex runtime verified by this repository supports",
+        ):
             compat_runtime.install(
                 self.codex_home,
                 runner=runner,
-                which=lambda _command: "/test/bin/npm",
+                which=lambda command: "/test/bin/npm" if command == "npm" else None,
             )
 
         self.assertEqual(runner.calls, [])
-        self.assertEqual(list(outside.iterdir()), [])
 
 
 class CompatRuntimeActivationTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="glm53-compat-activation-")
         self.codex_home = Path(self.tmp.name) / "codex"
-        self.npm_runner = FakeNpmRunner()
-        report = compat_runtime.install(
-            self.codex_home,
-            runner=self.npm_runner,
-            which=lambda _command: "/test/bin/npm",
-        )
-        self.binary = Path(report["codex_cli_path"])
+        self.binary = seed_legacy_runtime(self.codex_home)
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_activate_sets_desktop_cli_override_and_is_reversible(self):
+    def test_activate_refuses_to_replace_desktop_app_server(self):
         runner = FakeLaunchctlRunner()
         which = lambda command: "/bin/launchctl" if command == "launchctl" else None
 
-        activated = compat_runtime.activate(
-            self.codex_home, platform="darwin", runner=runner, which=which
-        )
-        self.assertEqual(activated["status"], "activated")
-        self.assertTrue(activated["restart_required"])
-        self.assertEqual(
-            runner.calls[-1][0],
-            ["/bin/launchctl", "setenv", "CODEX_CLI_PATH", str(self.binary)],
-        )
+        with self.assertRaisesRegex(
+            RuntimeError, "refusing to replace Codex Desktop app-server"
+        ):
+            compat_runtime.activate(
+                self.codex_home, platform="darwin", runner=runner, which=which
+            )
+
+        self.assertFalse(any(call[0][1] == "setenv" for call in runner.calls))
+
+    def test_deactivate_removes_the_legacy_managed_override(self):
+        runner = FakeLaunchctlRunner(current=str(self.binary))
+        which = lambda command: "/bin/launchctl" if command == "launchctl" else None
 
         deactivated = compat_runtime.deactivate(
             self.codex_home, platform="darwin", runner=runner, which=which
@@ -186,6 +135,21 @@ class CompatRuntimeActivationTest(unittest.TestCase):
             runner.calls[-1][0],
             ["/bin/launchctl", "unsetenv", "CODEX_CLI_PATH"],
         )
+
+    def test_status_marks_legacy_override_as_unsupported(self):
+        runner = FakeLaunchctlRunner(current=str(self.binary))
+
+        report = compat_runtime.status(
+            self.codex_home,
+            platform="darwin",
+            runner=runner,
+            which=lambda _command: "/bin/launchctl",
+        )
+
+        self.assertTrue(report["installed"])
+        self.assertTrue(report["active"])
+        self.assertFalse(report["activation_supported"])
+        self.assertIn("protocol-incompatible", report["reason"])
 
     def test_activate_refuses_to_replace_an_unrelated_override(self):
         runner = FakeLaunchctlRunner(current="/other/codex")

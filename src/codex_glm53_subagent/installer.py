@@ -5,8 +5,8 @@ package, rendered credential wrapper, and a SHA256 manifest into distinct
 coexistence-safe destinations under ``~/.codex``. No bridge, service, daemon,
 SQLite state, or provider fallback is installed; ``config.toml`` and
 ``auth.json`` are never created, read, or modified. The base install makes no
-network request; the separate compatibility command performs its explicit npm
-download only when requested.
+network request. The runtime helper only inspects or deactivates a retired
+legacy Desktop override; it does not download or activate a replacement.
 """
 
 from __future__ import annotations

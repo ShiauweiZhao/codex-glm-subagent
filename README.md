@@ -79,8 +79,6 @@ https://docs.bigmodel.cn/cn/coding-plan/tool/codex (and its markdown endpoint).
   with a native Responses transport.
 - Python 3.11 or newer for the installer
   (`python3 scripts/install.py install`).
-- npm is required only when explicitly installing the Codex 0.149 compatibility
-  runtime described below.
 - macOS: the installer stores the API key in the Login Keychain through Apple's
   Security.framework (via Python ctypes); no keychain/security CLI tool is
   required.
@@ -102,50 +100,47 @@ Hook trust decision. It never edits `~/.codex/config.toml` or `auth.json`; the
 parent top-level provider and login remain untouched. No API key is written into
 the repository, chat, issues, command arguments, or screenshots.
 
-## Codex 0.149 Compatibility
+## Released Codex Provider Limitation
 
-Codex 0.149.0 changed child-role handling so a registered role can override its
-model but inherits the parent provider. Consequently, an OpenAI parent sends
-`glm-5.3` to the ChatGPT backend and receives a model/account compatibility
-error before Z.AI is contacted. `SubagentStart` Hook output can append context
-only, so the Hook cannot repair provider selection.
+The official [Codex subagents documentation](https://developers.openai.com/codex/multi-agent/)
+says personal custom agents belong under `~/.codex/agents/` and are loaded as
+configuration layers for spawned sessions. The official
+[configuration reference](https://developers.openai.com/codex/config-reference/)
+classifies `model_provider` and `model_providers` as machine-local provider
+settings that must live at user level rather than in project-scoped config.
+This repository therefore keeps the worker role in the documented personal
+agent location and does not modify OpenAI Codex Core.
 
-Upstream evidence: [Codex 0.149 role override implementation](https://github.com/openai/codex/blob/rust-v0.149.0/codex-rs/core/src/agent/role.rs),
-[SubagentStart output schema](https://github.com/openai/codex/blob/rust-v0.149.0/codex-rs/hooks/schema/generated/subagent-start.command.output.schema.json),
-and [custom-provider subagent issue #17598](https://github.com/openai/codex/issues/17598).
+The released app-server implementations verified by this repository still
+apply the child model while inheriting the OpenAI parent's provider. The result
+is a visible model/account compatibility failure before Z.AI is contacted.
+`SubagentStart` Hook output carries the assignment but cannot repair provider
+selection.
 
-On macOS, this repository provides an explicit compatibility mode that installs
-the unmodified official `@openai/codex@0.148.0-alpha.9` package under
-`~/.codex/zai-glm53-subagent/codex-runtime/`. This is the last version verified
-with the repository's cross-provider native child contract. Package lifecycle
-scripts are disabled during installation.
+An earlier repository release worked around that gap by installing the official
+`@openai/codex@0.148.0-alpha.9` package and selecting it with
+`CODEX_CLI_PATH`. The official
+[environment-variable reference](https://developers.openai.com/codex/environment-variables/)
+lists stable public variables and does not list `CODEX_CLI_PATH`; it is not a
+stable public environment variable. Native verification also showed that this
+older executable is protocol-incompatible with the current Codex Desktop
+code-mode host. The workaround is retired: `install` and `activate` now fail
+closed without downloading a runtime or setting a Desktop override.
 
-After the normal repository install, install and activate the compatibility
-runtime:
-
-```
-~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime install --activate
-```
-
-Activation sets the macOS user-session `CODEX_CLI_PATH` override that Codex
-Desktop natively supports. It does not patch OpenAI Codex Core, replace anything
-inside `/Applications`, edit `config.toml` or `auth.json`, change the parent
-provider/login, or introduce a second concurrently orchestrated Codex CLI.
-Restart Codex Desktop after activation; the selected compatible executable
-becomes the app's primary local app-server.
-
-Inspect or deactivate the override with:
+If the legacy override was activated by an earlier version, inspect and remove
+only that exact managed override with:
 
 ```
 ~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime status
 ~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate
 ```
 
-Activation refuses to replace an unrelated existing `CODEX_CLI_PATH`, and
-deactivation refuses to unset an override it does not own. Restart Codex Desktop
-again after deactivation. When upstream restores supported per-child provider
-selection, deactivate this compatibility mode and use the current bundled
-runtime.
+Deactivation refuses to unset an unrelated `CODEX_CLI_PATH`. Restart Codex
+Desktop after deactivation so it returns to the bundled app-server. Until a
+released Codex build honors the personal agent's provider configuration, this
+failure must stay visible: do not spawn again, do not select Luna, and do not
+replace the Desktop runtime. Once support lands, the repository will use the
+bundled runtime directly.
 
 ## macOS Configure
 
@@ -213,8 +208,8 @@ Behavior changes are written tests-first.
 
 ## Uninstall
 
-If compatibility mode is active, deactivate it and restart Codex Desktop before
-running the normal uninstall:
+If the retired legacy override is active, deactivate it and restart Codex
+Desktop before running the normal uninstall:
 
 ```
 ~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate

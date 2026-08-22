@@ -55,10 +55,9 @@ code):
 
 - The base installer and tests use the Python 3.11+ standard library only. They
   require no third-party Python runtime package.
-- The explicit Codex 0.149 compatibility action downloads the unmodified
-  Apache-2.0-licensed official `@openai/codex@0.148.0-alpha.9` package from npm.
-  It is optional, installed side-by-side under the user's Codex home, and is not
-  redistributed in this repository.
+- The recovery helper recognizes a retired side-by-side installation of the
+  Apache-2.0-licensed official `@openai/codex@0.148.0-alpha.9` package. Current
+  installation does not download, activate, or redistribute that package.
 - macOS uses the system Keychain through Apple's Security.framework (via Python
   ctypes) for credential storage; no keychain/security CLI tool is required.
 

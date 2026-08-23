@@ -87,6 +87,21 @@ material runtime or configuration change and a new explicitly authorized
 deterministic smoke; never restore the retired Desktop override. This failure is
 not a bridge, authentication, or capacity problem.
 
+## Guardian model routing failure
+
+The installed GLM model catalog must set
+`auto_review_model_override="glm-5.3"`. Otherwise Codex may send its internal
+`codex-auto-review` identifier through the custom Z.AI provider when reviewing
+an `apply_patch` request.
+
+If automatic approval review fails with `modelCode` not found before producing
+an assessment, classify it as `guardian_model_unavailable`. This is a
+non-capacity runtime/configuration failure, not a Guardian policy denial. The
+child must stop without retrying or changing the write route, and must not
+select Luna. Retry only after the installed model catalog or Codex runtime has
+materially changed and the user explicitly authorizes a deterministic write
+smoke.
+
 ## Standing authorization
 
 - Context and tool results cross the Z.AI boundary and require authorization.

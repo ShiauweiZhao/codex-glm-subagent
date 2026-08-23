@@ -128,6 +128,7 @@ class Glm53ContractsTest(unittest.TestCase):
         self.assertEqual(m["default_reasoning_summary"], "none")
         self.assertFalse(m["support_verbosity"])
         self.assertEqual(m["apply_patch_tool_type"], "freeform")
+        self.assertEqual(m["auto_review_model_override"], "glm-5.3")
         self.assertEqual(m["truncation_policy"], {"mode": "bytes", "limit": 10000})
         self.assertEqual(m["context_window"], 1048576)
         self.assertEqual(m["max_context_window"], 1048576)
@@ -211,6 +212,14 @@ class Glm53ContractsTest(unittest.TestCase):
             normalized,
         )
         self.assertNotIn("codex-glm53-runtime install --activate", body)
+
+    def test_skill_classifies_guardian_model_unavailability(self):
+        body = read("skills", "use-zai-glm53-worker", "SKILL.md")
+        normalized = " ".join(body.lower().split())
+        self.assertIn("guardian_model_unavailable", normalized)
+        self.assertIn("modelcode", normalized)
+        self.assertIn("non-capacity", normalized)
+        self.assertIn("must not select luna", normalized)
 
     def test_skill_recovers_sandbox_denied_staging_without_changing_transport(self):
         body = read("skills", "use-zai-glm53-worker", "SKILL.md")

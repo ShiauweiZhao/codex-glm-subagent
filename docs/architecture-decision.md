@@ -30,6 +30,16 @@ retains only status and exact deactivation behavior for users who activated
 that legacy override. OpenAI Codex Core, the parent provider/login, and the
 direct Z.AI data plane remain unchanged.
 
+Write capability adds a Guardian review seam. The custom model catalog sets
+`auto_review_model_override="glm-5.3"` so Codex does not send its internal
+`codex-auto-review` identifier to the Z.AI provider. Without that override the
+provider can fail with `modelCode` not found, and Codex then fails closed before
+the requested patch is applied. That condition is
+`guardian_model_unavailable`, a non-capacity failure: it must not select Luna
+or be described as a policy verdict. A disposable native write smoke must
+exercise `apply_patch`, complete Guardian review, and verify the resulting file
+before the worker is considered write-ready on a runtime/configuration pair.
+
 Eligible bounded implementation defaults to GLM. Only an explicit GLM
 quota/token/rate-limit exhaustion signal allows parent orchestration to reissue
 the same self-contained job to `agent_type="worker"`,

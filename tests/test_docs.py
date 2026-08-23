@@ -91,13 +91,15 @@ class DocsContractTests(unittest.TestCase):
         self.assertNotRegex(readme, r"`keychain`\s+must be available")
         self.assertNotRegex(readme, r"through\s+`security`")
 
-    def test_readme_current_status_records_native_ready_smoke(self):
+    def test_readme_current_status_distinguishes_read_and_write_readiness(self):
         readme = read("README.md")
-        self.assertRegex(readme, r"Current status is `?ready")
+        normalized = " ".join(readme.split())
+        self.assertRegex(readme, r"Current status is `?read_ready")
+        self.assertIn("Write status is `unverified`", normalized)
         self.assertIn("0.148.0-alpha.21", readme)
         self.assertIn("ZAI_GLM53_NATIVE_OK", readme)
         self.assertIn("arithmetic=323", readme)
-        self.assertNotRegex(readme, r"Current status is `?locally_verified only")
+        self.assertNotRegex(readme, r"Current status is `?ready")
 
     def test_readme_no_localhost_bridge_or_fallback(self):
         readme = read("README.md")
@@ -156,6 +158,15 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("no fallback", doc.lower())
         self.assertIn("Hook is required independently of bridge", doc)
         self.assertIn("provider-internal ciphertext", doc)
+
+    def test_guardian_model_routing_and_write_smoke_are_documented(self):
+        for relpath in ("README.md", "docs/architecture-decision.md"):
+            text = read(relpath)
+            normalized = " ".join(text.lower().split())
+            self.assertIn("auto_review_model_override", text, relpath)
+            self.assertIn("guardian", normalized, relpath)
+            self.assertIn("write smoke", normalized, relpath)
+            self.assertIn("modelcode", normalized, relpath)
 
     def test_parent_orchestration_reroute_is_distinct_from_runtime_fallback(self):
         for relpath in (

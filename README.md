@@ -123,6 +123,16 @@ ZAI_GLM53_NATIVE_OK
 arithmetic=323
 ```
 
+Write capability has a separate Guardian gate. Codex otherwise selects its
+internal `codex-auto-review` model for automatic approval review, which a
+custom Z.AI provider cannot serve and may report as `modelCode` not found. The
+managed GLM catalog therefore sets
+`auto_review_model_override="glm-5.3"`, keeping both the coding turn and its
+Guardian review on the same explicit `zai_glm53` provider and model. A native
+read callback is not sufficient evidence for implementation work: each Codex
+runtime/configuration combination must also pass an explicitly authorized
+temporary write smoke before write capability is reported as ready.
+
 An earlier repository release worked around that gap by installing the official
 `@openai/codex@0.148.0-alpha.9` package and selecting it with
 `CODEX_CLI_PATH`. The official
@@ -210,6 +220,11 @@ installer manages, and never placed in the repository or command arguments.
   restores GLM-first routing. Use no paid recovery probe just to test capacity.
 - A paid or native live smoke requires explicit user authorization and is never
   triggered incidentally.
+- A write smoke uses a disposable writable directory, requires `apply_patch` to
+  produce the expected file contents, and requires a completed Guardian
+  assessment. `modelCode` not found is classified as
+  `guardian_model_unavailable`, a non-capacity failure: do not retry the same
+  write, do not select Luna, and do not claim write readiness.
 
 ## Local Tests
 
@@ -243,15 +258,20 @@ exact macOS Keychain item.
 
 ## Verification Levels
 
-Documentation and tests distinguish three levels:
+Documentation and tests distinguish four levels:
 
 - `locally_verified`: repository tests and an isolated temp-home install smoke
   passed without a paid API.
 - `configured`: the worker and helper are installed into a real Codex home and
   credentials have been supplied.
-- `ready`: verified by an explicitly authorized real GLM child smoke.
+- `read_ready`: verified by an explicitly authorized real GLM child callback
+  that performs no mutation.
+- `write_ready`: verified by an explicitly authorized real GLM `apply_patch`
+  smoke whose Guardian assessment completed and whose file result was checked.
 
-Current status is `ready` on the verified local macOS installation. On
+Current status is `read_ready` on the verified local macOS installation. Write
+status is `unverified`; no successful Guardian-gated write smoke has been
+recorded yet. On
 2026-08-22, the bundled `codex-cli 0.148.0-alpha.21` returned this exact native
 child callback after the assignment was staged through the installed Hook:
 
@@ -261,7 +281,9 @@ arithmetic=323
 ```
 
 This result is environment-specific. Other Codex builds must repeat the native
-smoke before being reported as ready.
+read smoke before being reported as `read_ready`, and every build/configuration
+pair must separately pass the write smoke before being reported as
+`write_ready`.
 
 ## Security
 

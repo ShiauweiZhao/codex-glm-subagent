@@ -30,11 +30,20 @@ retains only status and exact deactivation behavior for users who activated
 that legacy override. OpenAI Codex Core, the parent provider/login, and the
 direct Z.AI data plane remain unchanged.
 
-Write capability adds a Guardian review seam. The custom model catalog sets
-`auto_review_model_override="glm-5.3"` so Codex does not send its internal
-`codex-auto-review` identifier to the Z.AI provider. Without that override the
-provider can fail with `modelCode` not found, and Codex then fails closed before
-the requested patch is applied. That condition is
+Write capability adds a Guardian review seam. Codex applies
+`model_catalog_json` at shared model-manager startup; the same field in an
+agent role is a per-thread no-op. A separate, explicitly invoked startup-catalog
+helper therefore merges the current `models_cache.json` with hidden GLM
+metadata and writes one removable top-level `model_catalog_json` block. The GLM
+entry sets `auto_review_model_override="glm-5.3"` so Codex does not send its
+internal `codex-auto-review` identifier to the Z.AI provider. The combined
+catalog retains the selected parent model and `codex-auto-review`, while hidden
+visibility keeps GLM out of the parent picker. The helper does not read or
+modify `auth.json`, provider settings, the selected parent model, or login.
+
+Without the effective startup override the provider can fail with `modelCode`
+not found, and Codex then fails closed before the requested patch is applied.
+That condition is
 `guardian_model_unavailable`, a non-capacity failure: it must not select Luna
 or be described as a policy verdict. A disposable native write smoke must
 exercise `apply_patch`, complete Guardian review, and verify the resulting file
@@ -110,7 +119,10 @@ https://open.bigmodel.cn/api/v1
   `ZAI_API_KEY` from the environment. No key value is written to the
   repository, chat, issues, command arguments, or screenshots.
 - **Separate activities**: install, configure, and a live smoke are distinct;
-  this repository never changes the parent top-level provider or login.
+  the normal installer never reads or changes `config.toml` or `auth.json`.
+  Startup-catalog activation is a separate opt-in action that changes only its
+  managed `model_catalog_json` block and requires a Codex Desktop restart; it
+  never changes the parent provider, selected model, login, or `auth.json`.
 
 ## Control-plane reference
 

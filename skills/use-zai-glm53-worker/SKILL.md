@@ -89,10 +89,17 @@ not a bridge, authentication, or capacity problem.
 
 ## Guardian model routing failure
 
-The installed GLM model catalog must set
-`auto_review_model_override="glm-5.3"`. Otherwise Codex may send its internal
-`codex-auto-review` identifier through the custom Z.AI provider when reviewing
-an `apply_patch` request.
+Before staging any write assignment, run the installed
+`codex-glm53-startup-catalog status` helper. It must report the startup catalog
+as active, and the current Codex task must have started after the required
+Restart Codex Desktop step. If either condition is not established, the parent
+must not stage or spawn the write assignment.
+
+The effective startup catalog must set
+`auto_review_model_override="glm-5.3"`. An agent-role `model_catalog_json` is a
+per-thread no-op and is not sufficient. Without the startup metadata Codex may
+send its internal `codex-auto-review` identifier through the custom Z.AI
+provider when reviewing an `apply_patch` request.
 
 If automatic approval review fails with `modelCode` not found before producing
 an assessment, classify it as `guardian_model_unavailable`. This is a

@@ -23,7 +23,6 @@ developer_instructions = "bounded worker"
 model_provider = "zai_glm53"
 model = "glm-5.3"
 model_context_window = 1048576
-model_catalog_json = "__CODEX_GLM53_MODEL_CATALOG__"
 
 [model_providers.zai_glm53]
 name = "Z.AI GLM-5.3 Responses"
@@ -57,6 +56,17 @@ CREDENTIALS_PY = (
     'if __name__ == "__main__":\n'
     '    raise SystemExit(main())\n'
 )
+STARTUP_CATALOG_PY = (
+    '"""startup catalog module for tests."""\n'
+    'import argparse\n'
+    'def main(argv=None):\n'
+    '    parser = argparse.ArgumentParser(description="Manage startup catalog")\n'
+    '    parser.add_argument("action", choices=("activate", "deactivate", "status"))\n'
+    '    parser.parse_args(argv)\n'
+    '    return 0\n'
+    'if __name__ == "__main__":\n'
+    '    raise SystemExit(main())\n'
+)
 WRAPPER = (
     "#!/bin/sh\n"
     "CODEX_GLM53_RUNTIME_ROOT=__CODEX_GLM53_RUNTIME_ROOT__\n"
@@ -68,6 +78,12 @@ RUNTIME_WRAPPER = (
     "CODEX_GLM53_RUNTIME_ROOT=__CODEX_GLM53_RUNTIME_ROOT__\n"
     'export PYTHONPATH="${CODEX_GLM53_RUNTIME_ROOT}${PYTHONPATH:+:$PYTHONPATH}"\n'
     'exec __PYTHON_EXECUTABLE__ -m codex_glm53_subagent.compat_runtime "$@"\n'
+)
+STARTUP_CATALOG_WRAPPER = (
+    "#!/bin/sh\n"
+    "CODEX_GLM53_RUNTIME_ROOT=__CODEX_GLM53_RUNTIME_ROOT__\n"
+    'export PYTHONPATH="${CODEX_GLM53_RUNTIME_ROOT}${PYTHONPATH:+:$PYTHONPATH}"\n'
+    'exec __PYTHON_EXECUTABLE__ -m codex_glm53_subagent.startup_catalog "$@"\n'
 )
 SNIPPET = (
     "<!-- codex-glm-subagent:start -->\n"
@@ -96,6 +112,7 @@ def make_repo(root: Path) -> Path:
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text(PKG_INIT, encoding="utf-8")
     (pkg / "credentials.py").write_text(CREDENTIALS_PY, encoding="utf-8")
+    (pkg / "startup_catalog.py").write_text(STARTUP_CATALOG_PY, encoding="utf-8")
 
     scripts = root / "scripts"
     scripts.mkdir()
@@ -105,6 +122,9 @@ def make_repo(root: Path) -> Path:
     runtime_wrapper = scripts / "codex-glm53-runtime"
     runtime_wrapper.write_text(RUNTIME_WRAPPER, encoding="utf-8")
     os.chmod(runtime_wrapper, 0o700)
+    startup_catalog_wrapper = scripts / "codex-glm53-startup-catalog"
+    startup_catalog_wrapper.write_text(STARTUP_CATALOG_WRAPPER, encoding="utf-8")
+    os.chmod(startup_catalog_wrapper, 0o700)
 
     snippets = root / "snippets"
     snippets.mkdir()
@@ -141,8 +161,7 @@ class RenderTest(InstallerTestBase):
         self.assertEqual(prov["auth"]["args"], ["print-api-key"])
         self.assertEqual(prov["auth"]["timeout_ms"], 5000)
         self.assertEqual(prov["auth"]["refresh_interval_ms"], 300000)
-        catalog = self.codex / "zai-glm53-subagent" / "glm-5.3-models.json"
-        self.assertEqual(data["model_catalog_json"], str(catalog))
+        self.assertNotIn("model_catalog_json", data)
         self.assertEqual(agent_path.read_text(encoding="utf-8").count(
             "[model_providers.zai_glm53.auth]"), 1)
 
@@ -173,12 +192,21 @@ class RenderTest(InstallerTestBase):
                 / "codex-glm53-runtime"
             ).is_file()
         )
+        self.assertTrue(
+            (
+                self.codex
+                / "zai-glm53-subagent"
+                / "bin"
+                / "codex-glm53-startup-catalog"
+            ).is_file()
+        )
 
     def test_wrapper_renders_abs_python_and_runtime(self):
         self.install("darwin")
         for name, module in (
             ("codex-zai-glm53-credentials", "credentials"),
             ("codex-glm53-runtime", "compat_runtime"),
+            ("codex-glm53-startup-catalog", "startup_catalog"),
         ):
             wrapper = self.codex / "zai-glm53-subagent" / "bin" / name
             text = wrapper.read_text(encoding="utf-8")
@@ -323,6 +351,13 @@ class InstallBehaviorTest(InstallerTestBase):
         self.assertEqual(stat.S_IMODE(os.stat(helper).st_mode), 0o700)
         runtime_helper = self.codex / "zai-glm53-subagent" / "bin" / "codex-glm53-runtime"
         self.assertEqual(stat.S_IMODE(os.stat(runtime_helper).st_mode), 0o700)
+        startup_catalog_helper = (
+            self.codex
+            / "zai-glm53-subagent"
+            / "bin"
+            / "codex-glm53-startup-catalog"
+        )
+        self.assertEqual(stat.S_IMODE(os.stat(startup_catalog_helper).st_mode), 0o700)
         agent = self.codex / "agents" / "zai-glm53-worker.toml"
         self.assertEqual(stat.S_IMODE(os.stat(agent).st_mode), 0o600)
         manifest = self.codex / "zai-glm53-subagent" / "install-manifest.json"
@@ -401,6 +436,21 @@ class AgentsBlockTest(InstallerTestBase):
         )
         self.assertEqual(runtime_help.returncode, 0, runtime_help.stderr)
         self.assertIn("retired legacy Codex Desktop runtime override", runtime_help.stdout)
+
+        startup_catalog_helper = (
+            codex_home
+            / "zai-glm53-subagent"
+            / "bin"
+            / "codex-glm53-startup-catalog"
+        )
+        startup_help = subprocess.run(
+            [str(startup_catalog_helper), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(startup_help.returncode, 0, startup_help.stderr)
+        self.assertIn("opt-in GLM startup model catalog", startup_help.stdout)
 
         installer.uninstall(codex_home, platform="darwin")
         after = agents.read_text(encoding="utf-8")

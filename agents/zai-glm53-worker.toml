@@ -38,7 +38,6 @@ instead of guessing from the encrypted collaboration payload or inherited contex
 model_provider = "zai_glm53"
 model = "glm-5.3"
 model_context_window = 1048576
-model_catalog_json = "__CODEX_GLM53_MODEL_CATALOG__"
 
 [model_providers.zai_glm53]
 name = "Z.AI GLM-5.3 Responses"

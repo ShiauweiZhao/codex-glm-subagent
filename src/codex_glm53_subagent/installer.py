@@ -33,7 +33,6 @@ MANIFEST_RELATIVE = Path("zai-glm53-subagent") / "install-manifest.json"
 
 AUTH_BODY_PLACEHOLDER = "__CODEX_GLM53_AUTH_BODY__"
 AUTH_BODY_LINE = f'placeholder = "{AUTH_BODY_PLACEHOLDER}"'
-MODEL_CATALOG_PLACEHOLDER = "__CODEX_GLM53_MODEL_CATALOG__"
 PYTHON_PLACEHOLDER = "__PYTHON_EXECUTABLE__"
 RUNTIME_ROOT_PLACEHOLDER = "__CODEX_GLM53_RUNTIME_ROOT__"
 
@@ -152,6 +151,13 @@ def _managed_sources(repo_root: Path) -> list[tuple[Path, Path, int]]:
             0o700,
         )
     )
+    sources.append(
+        (
+            repo_root / "scripts" / "codex-glm53-startup-catalog",
+            Path("zai-glm53-subagent") / "bin" / "codex-glm53-startup-catalog",
+            0o700,
+        )
+    )
     return sources
 
 
@@ -179,13 +185,10 @@ def _source_data(
         data = data.replace(
             AUTH_BODY_LINE.encode(), _render_auth_body(helper, platform).encode()
         )
-        catalog_path = codex_home / "zai-glm53-subagent" / "glm-5.3-models.json"
-        data = data.replace(
-            MODEL_CATALOG_PLACEHOLDER.encode(), _escaped(str(catalog_path)).encode()
-        )
     if relative in {
         Path("zai-glm53-subagent") / "bin" / "codex-zai-glm53-credentials",
         Path("zai-glm53-subagent") / "bin" / "codex-glm53-runtime",
+        Path("zai-glm53-subagent") / "bin" / "codex-glm53-startup-catalog",
     }:
         shell_python = shlex.quote(str(Path(sys.executable)))
         data = data.replace(PYTHON_PLACEHOLDER.encode(), shell_python.encode())

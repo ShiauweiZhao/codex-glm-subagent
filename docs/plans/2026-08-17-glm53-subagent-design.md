@@ -49,6 +49,12 @@ markdown endpoint).
 
 - Installer: `python3 scripts/install.py install`. It never edits
   `~/.codex/config.toml` or `auth.json`; no top-level provider/login change.
+- Explicit startup-catalog helper:
+  `~/.codex/zai-glm53-subagent/bin/codex-glm53-startup-catalog activate`.
+  This separate opt-in action preserves the parent model catalog, injects
+  hidden GLM review metadata, changes only its managed top-level
+  `model_catalog_json` block, and requires a Codex Desktop restart. It never
+  reads or changes `auth.json`, provider settings, the selected model, or login.
 - macOS helper: `~/.codex/zai-glm53-subagent/bin/codex-zai-glm53-credentials`
   with `configure`, `status`, `purge`; API key stored in the Login Keychain via
   Apple's Security.framework (Python ctypes, no keychain/security CLI).

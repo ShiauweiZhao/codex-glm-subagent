@@ -130,6 +130,20 @@ class DocsContractTests(unittest.TestCase):
         self.assertIn("Login Keychain", readme)
         self.assertIn("ZAI_API_KEY", readme)
 
+    def test_readme_documents_explicit_startup_catalog_activation(self):
+        readme = read("README.md")
+        normalized = " ".join(readme.lower().split())
+        self.assertIn("codex-glm53-startup-catalog activate", readme)
+        self.assertIn("codex-glm53-startup-catalog deactivate", readme)
+        self.assertIn("models_cache.json", readme)
+        self.assertIn("model_catalog_json", readme)
+        self.assertIn("startup only", normalized)
+        self.assertIn("per-thread", normalized)
+        self.assertIn("no-op", normalized)
+        self.assertIn("hidden", normalized)
+        self.assertIn("restart codex desktop", normalized)
+        self.assertIn("does not read or modify `auth.json`", normalized)
+
     def test_readme_retires_unsafe_desktop_runtime_override(self):
         readme = read("README.md")
         normalized = " ".join(readme.split())

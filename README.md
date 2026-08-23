@@ -100,6 +100,21 @@ Hook trust decision. It never edits `~/.codex/config.toml` or `auth.json`; the
 parent top-level provider and login remain untouched. No API key is written into
 the repository, chat, issues, command arguments, or screenshots.
 
+Write-capable use needs one separate, explicit startup-catalog activation:
+
+```text
+~/.codex/zai-glm53-subagent/bin/codex-glm53-startup-catalog activate
+~/.codex/zai-glm53-subagent/bin/codex-glm53-startup-catalog status
+```
+
+The activation command is intentionally not part of `install`. It reads the
+current `models_cache.json`, builds a combined startup catalog that preserves
+the parent's current model metadata, injects `glm-5.3` as a hidden model, and
+adds only a managed top-level `model_catalog_json` block to `config.toml`. It
+stores an exact mode-`0600` pre-activation config backup and does not read or
+modify `auth.json`, the parent provider, selected model, or ChatGPT login.
+Restart Codex Desktop after activation; the catalog is startup only.
+
 ## Codex Runtime Compatibility
 
 The official [Codex subagents documentation](https://developers.openai.com/codex/multi-agent/)
@@ -125,11 +140,21 @@ arithmetic=323
 
 Write capability has a separate Guardian gate. Codex otherwise selects its
 internal `codex-auto-review` model for automatic approval review, which a
-custom Z.AI provider cannot serve and may report as `modelCode` not found. The
-managed GLM catalog therefore sets
-`auto_review_model_override="glm-5.3"`, keeping both the coding turn and its
-Guardian review on the same explicit `zai_glm53` provider and model. A native
-read callback is not sufficient evidence for implementation work: each Codex
+custom Z.AI provider cannot serve and may report as `modelCode` not found.
+Codex applies `model_catalog_json` while constructing its shared model manager
+at startup only; the same setting in an agent role is accepted as a per-thread
+override but is a no-op. The explicit activation above is therefore required:
+its combined catalog gives `glm-5.3` the
+`auto_review_model_override="glm-5.3"` metadata while retaining the parent's
+current models and `codex-auto-review`. GLM stays hidden from the parent picker,
+and both the coding turn and Guardian review use the explicit `zai_glm53`
+provider/model only when that worker is spawned.
+
+Because a configured startup catalog is static, rerun `activate` after a Codex
+upgrade or model-cache refresh, then restart Codex Desktop. Activation fails
+closed if the selected parent model or `codex-auto-review` is absent, or if an
+unmanaged global `model_catalog_json` already exists. A native read callback is
+not sufficient evidence for implementation work: each Codex
 runtime/configuration combination must also pass an explicitly authorized
 temporary write smoke before write capability is reported as ready.
 
@@ -239,8 +264,15 @@ Behavior changes are written tests-first.
 
 ## Uninstall
 
-If the retired legacy override is active, deactivate it and restart Codex
-Desktop before running the normal uninstall:
+Deactivate the startup catalog and restart Codex Desktop before uninstalling:
+
+```text
+~/.codex/zai-glm53-subagent/bin/codex-glm53-startup-catalog deactivate
+```
+
+This removes only the exact managed block and preserves unrelated changes made
+to `config.toml` after activation. If the retired legacy override is also
+active, deactivate it before running the normal uninstall:
 
 ```
 ~/.codex/zai-glm53-subagent/bin/codex-glm53-runtime deactivate

@@ -62,7 +62,7 @@ class Glm53ContractsTest(unittest.TestCase):
         self.assertEqual(data["model_provider"], "zai_glm53")
         self.assertEqual(data["model"], "glm-5.3")
         self.assertEqual(data["model_context_window"], 1048576)
-        self.assertEqual(data["model_catalog_json"], "__CODEX_GLM53_MODEL_CATALOG__")
+        self.assertNotIn("model_catalog_json", data)
 
     def test_toml_provider_schema(self):
         data = tomllib.loads(read("agents", "zai-glm53-worker.toml"))
@@ -220,6 +220,15 @@ class Glm53ContractsTest(unittest.TestCase):
         self.assertIn("modelcode", normalized)
         self.assertIn("non-capacity", normalized)
         self.assertIn("must not select luna", normalized)
+
+    def test_skill_requires_active_startup_catalog_before_write_assignments(self):
+        body = read("skills", "use-zai-glm53-worker", "SKILL.md")
+        normalized = " ".join(body.lower().split())
+        self.assertIn("codex-glm53-startup-catalog status", body)
+        self.assertIn("startup catalog", normalized)
+        self.assertIn("write assignment", normalized)
+        self.assertIn("restart codex desktop", normalized)
+        self.assertIn("must not stage", normalized)
 
     def test_skill_recovers_sandbox_denied_staging_without_changing_transport(self):
         body = read("skills", "use-zai-glm53-worker", "SKILL.md")
